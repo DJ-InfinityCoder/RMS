@@ -1,106 +1,50 @@
-# Template bottom tabs with auth flow (Typescript)
+# Welcome to your Expo app 👋
 
-Typescript Template starter with React Navigation Bottom Tabs and Supabase auth using React Context
+This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
-# Preview
+## Get started
 
-![../media/authflow.png](../media/authflow.png)
+1. Install dependencies
 
-# Installation
-
-1. Install [node.js](https://nodejs.org/en/)
-2. Install Expo
-
-   ```jsx
-   npm install --global expo-cli
-   ```
-
-3. Download this repo
-4. Install deps on your template folder
-
-   ```jsx
+   ```bash
    npm install
    ```
 
-5. Start the environtment
+2. Start the app
 
-   ```jsx
-   expo start
+   ```bash
+   npx expo start
    ```
 
-# Auth Flow
+In the output, you'll find options to open the app in a
 
-### Supabase Setup
+- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
+- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
+- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
+- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
-- Set up a new Supabase.io project
-- Fill your supabase credentials to your config inside `./src/initSupabase.ts`
-- You can find your supabase credentials in your project -> settings -> API
+You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
-  ```jsx
-  // Better put your these secret keys in .env file
-  export const supabase = createClient(
-  	"supabaseUrl", "supabaseKey",
-  	{
-  		localStorage: AsyncStorage as any,
-  	}
-  );
-  ```
+## Get a fresh project
 
-and you good to go!
+When you're ready, run:
 
-### Prebuilt UI Screens
-
-There are 3 screens included inside `./src/screens/auth` and one more thing its included with the supabase auth function, so you don't need to create the function. The ilustrations I use [undraw](https://undraw.co/)
-
-- Login screen `./src/screens/auth/login.tsx`
-- Register screen `./src/screens/auth/register.tsx`
-- Forget password screen `./src/screens/auth/forget.tsx`
-
-### React Navigation Auth Flow
-
-The checking logged users process is inside `./src/provider/AuthProvider` I use React Context, you can add more functions like get the data of the user and store it to the context (better static data, ex: uid)
-
-Inside the navigator `./src/navigation/AppNavigator.js`
-There's 2 stack navigator :
-
-- `<Auth/>` → for not logged in users stack
-- `<Main/>` → for logged in users stack
-- `<Loading/>` → when checking if the user is logged in or not loading screen
-
-```jsx
-export default () => {
-	const auth = useContext(AuthContext);
-	const user = auth.user;
-	return (
-		<NavigationContainer>
-			{user == null && <Loading />}
-			{user == false && <Auth />}
-			{user == true && <Main />}
-		</NavigationContainer>
-	);
-};
+```bash
+npm run reset-project
 ```
 
-# Rapi UI
+This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
 
-![../media/hero.png](../media/hero.png)
+## Learn more
 
-These UI components are provided by [Rapi UI](https://rapi-ui.kikiding.space/).
-Check the [documentation](https://rapi-ui.kikiding.space/docs/) for usage and more components.
+To learn more about developing your project with Expo, look at the following resources:
 
-# File Managements
+- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
+- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
 
-These are the folders and the functionality all in `src/`
+## Join the community
 
-```jsx
-/src/assets -> for media such as images, etc
-/src/components -> for components
-/src/navigation -> for React Navigation
-/src/provider -> for React Context
-/src/screens -> for Screens
-/src/types -> for Types
-```
+Join our community of developers creating universal apps.
 
-if you find these useful don't forget to give it a star ⭐ and share it to your friends ❤️
-
-Reach me on [twitter](https://twitter.com/kikiding/)
+- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
+- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
