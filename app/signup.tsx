@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { AuthContainer } from '@/components/auth/AuthContainer';
-import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { CustomButton } from '@/components/auth/CustomButton';
+import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { AuthTheme } from '@/constants/AuthTheme';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 
 export default function SignUpScreen() {
     const router = useRouter();
     const [formData, setFormData] = useState({
         name: '',
         email: '',
+        phone: '',
         password: '',
         confirmPassword: '',
     });
@@ -28,6 +29,12 @@ export default function SignUpScreen() {
             newErrors.email = 'Email is required';
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = 'Invalid email format';
+        }
+
+        if (!formData.phone.trim()) {
+            newErrors.phone = 'Phone number is required';
+        } else if (formData.phone.length < 10) {
+            newErrors.phone = 'Invalid phone number';
         }
 
         if (!formData.password) {
@@ -48,12 +55,36 @@ export default function SignUpScreen() {
         if (!validateForm()) return;
 
         setLoading(true);
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        setLoading(false);
-        console.log('Sign Up:', formData);
-        // Redirect to login after successful signup
-        router.push('/login' as any);
+        try {
+            const response = await fetch('/api/auth/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: formData.name,
+                    email: formData.email,
+                    phone: formData.phone,
+                    password: formData.password,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                setErrors({ email: result.error || 'Signup failed' });
+                return;
+            }
+
+            console.log('Sign Up successful:', result.user);
+            // Redirect to login after successful signup
+            router.push('/login' as any);
+        } catch (error) {
+            console.error('Signup error:', error);
+            setErrors({ email: 'An error occurred during signup' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -81,6 +112,15 @@ export default function SignUpScreen() {
                         error={errors.email}
                         keyboardType="email-address"
                         autoCapitalize="none"
+                    />
+
+                    <CustomTextInput
+                        label="Phone Number"
+                        value={formData.phone}
+                        onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                        placeholder="Enter your phone number"
+                        error={errors.phone}
+                        keyboardType="phone-pad"
                     />
 
                     <CustomTextInput

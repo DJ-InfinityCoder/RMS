@@ -32,7 +32,7 @@ model User {
   id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   full_name     String   @db.VarChar(100)
   email         String   @unique @db.VarChar(150)
-  phone         String   @unique @db.VarChar(15)
+  phone         String?  @unique @db.VarChar(15)
   password_hash String
   role          UserRole @default(CUSTOMER)
   created_at    DateTime @default(now())

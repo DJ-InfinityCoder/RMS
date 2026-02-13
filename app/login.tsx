@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Checkbox } from 'react-native-paper';
-import { useRouter } from 'expo-router';
 import { AuthContainer } from '@/components/auth/AuthContainer';
-import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { CustomButton } from '@/components/auth/CustomButton';
+import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { AuthTheme } from '@/constants/AuthTheme';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Checkbox } from 'react-native-paper';
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -37,10 +37,33 @@ export default function LoginScreen() {
         if (!validateForm()) return;
 
         setLoading(true);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        setLoading(false);
-        console.log('Login:', formData, 'Remember:', rememberMe);
-        router.push('/(tabs)' as any);
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: formData.email,
+                    password: formData.password,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                setErrors({ email: result.error || 'Login failed' });
+                return;
+            }
+
+            console.log('Login successful:', result.user);
+            router.push('/dashboard' as any);
+        } catch (error) {
+            console.error('Login error:', error);
+            setErrors({ email: 'An error occurred during login' });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleSocialLogin = (provider: string) => {
