@@ -14,7 +14,8 @@ import { useRouter } from 'expo-router';
 import { setSelectedRestaurant } from '../lib/selectedRestaurant';
 import { parseQRValue } from '../lib/restaurantQR';
 import { restaurants } from '../data/restaurants';
-import { callGoogleVisionOCR, parseMenuText, OcrMenuItem } from '../lib/ocrService';
+import { runOCR, parseMenuText, OcrMenuItem } from '../lib/ocrService';
+import { searchFoodImage } from '../lib/imageSearchService';
 import { OCRMenuResultModal } from './OCRMenuResultModal';
 
 type ScanMode = 'qr' | 'ocr';
@@ -126,26 +127,46 @@ export const ScannerWidget = () => {
             setIsModalVisible(true);
             setOcrItems([]);
 
+            // ── Step 1: Capture photo (base64 for OCR.space) ──
             const photo = await cameraRef.current.takePictureAsync({
                 base64: true,
-                quality: 0.85,
+                quality: 0.8,
+                skipProcessing: false,
             });
 
             if (!photo?.base64) {
-                throw new Error('Failed to capture image.');
+                throw new Error('Failed to capture image. Please try again.');
             }
 
-            // Call Google Cloud Vision OCR
-            const rawText = await callGoogleVisionOCR(photo.base64);
+            // ── Step 2: OCR.space free API — extract text from the photo ──
+            const rawText = await runOCR(photo.base64);
 
-            // Parse raw text into structured menu items
+            // ── Step 3: Parse raw OCR text into menu item objects ──
             const parsed = parseMenuText(rawText);
+
+            if (parsed.length === 0) {
+                setOcrItems([]);
+                return;
+            }
+
+            // ── Step 4: Show skeleton cards immediately ──
             setOcrItems(parsed);
+
+            // ── Step 5: Google Image Search — fetch a food photo per item ──
+            // Run searches in parallel (max 6 to respect quota)
+            const capped = parsed.slice(0, 6);
+            const withImages = await Promise.all(
+                capped.map(async (item) => {
+                    const url = await searchFoodImage(item.imageQuery);
+                    return { ...item, imageUrl: url ?? undefined };
+                })
+            );
+            setOcrItems(withImages);
         } catch (err: any) {
             console.error('OCR Error:', err);
             setIsModalVisible(false);
             Alert.alert(
-                'OCR Failed',
+                'Scan Failed',
                 err?.message ?? 'Could not read the menu. Please try again.'
             );
         } finally {
