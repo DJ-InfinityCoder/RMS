@@ -18,6 +18,7 @@ import { setSelectedRestaurant } from '@/lib/selectedRestaurant';
 import MapView, { Marker } from "react-native-maps";
 import useUserLocation from "../hooks/useUserLocation";
 import { restaurants } from "../data/restaurants";
+import { ScannerWidget } from "../components/ScannerWidget";
 
 const CATEGORIES = [
   { id: "1", name: "All", icon: "fire" },
@@ -78,7 +79,7 @@ export default function HomeScreen() {
           </TouchableOpacity>
           <View style={styles.addressContainer}>
             <Text style={styles.deliverTo}>DELIVER TO</Text>
-            <Text style={styles.address}>Rose Lab office ▾</Text>
+            <Text style={styles.address}>{region.latitude.toFixed(4)}, {region.longitude.toFixed(4)} ▾</Text>
           </View>
           <View style={styles.cartBadge}>
             <Ionicons name="bag-handle-outline" size={24} color="white" />
@@ -91,6 +92,8 @@ export default function HomeScreen() {
         <Text style={styles.welcomeText}>
           Hey Bharat, <Text style={{ fontWeight: "bold" }}>Good Afternoon!</Text>
         </Text>
+
+        <ScannerWidget />
 
         {/* Search Bar (opens Search screen) */}
         <TouchableOpacity style={styles.searchBar} onPress={() => router.push('/search' as any)} activeOpacity={0.8}>
