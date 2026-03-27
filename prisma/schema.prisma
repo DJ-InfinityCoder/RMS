@@ -14,6 +14,8 @@ model User {
   email         String               @unique @db.VarChar(150)
   phone         String?              @unique @db.VarChar(15)
   password_hash String
+  latitude      Decimal?             @db.Decimal(9, 6)
+  longitude     Decimal?             @db.Decimal(9, 6)
   orders        Order[]
   reviews       Review[]
   preferences   UserFoodPreference[]
@@ -44,12 +46,16 @@ model Restaurant {
   latitude      Decimal?          @db.Decimal(9, 6)
   longitude     Decimal?          @db.Decimal(9, 6)
   phone         String?           @db.VarChar(15)
+  image_url     String?
   is_active     Boolean           @default(true)
   created_at    DateTime          @default(now())
   dishes        Dish[]
   offers        Offer[]
   orders        Order[]
+  reviews       Review[]
   qr_code       RestaurantQRCode?
+  table_slots   TableSlot[]
+  cuisine       String[]          @default([])
 
   @@index([latitude, longitude], map: "idx_restaurant_location")
   @@index([email])
@@ -66,6 +72,18 @@ model RestaurantQRCode {
   @@map("restaurant_qr_codes")
 }
 
+model TableSlot {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  restaurant_id String     @db.Uuid
+  time          String     @db.VarChar(20)
+  total_seats   Int        @default(20)
+  booked_seats  Int        @default(0)
+  restaurant    Restaurant @relation(fields: [restaurant_id], references: [id], onDelete: Cascade)
+
+  @@index([restaurant_id], map: "idx_table_slots_restaurant")
+  @@map("table_slots")
+}
+
 model Dish {
   id              String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   restaurant_id   String           @db.Uuid
@@ -76,6 +94,7 @@ model Dish {
   price           Decimal?         @db.Decimal(10, 2)
   recommended_for String?
   image_url       String?
+  category        String?          @db.VarChar(100)
   is_available    Boolean          @default(true)
   ingredients     DishIngredient[]
   restaurant      Restaurant       @relation(fields: [restaurant_id], references: [id], onDelete: Cascade)
@@ -97,6 +116,7 @@ model Ingredient {
 model DishIngredient {
   dish_id       String     @db.Uuid
   ingredient_id String     @db.Uuid
+  is_allergen   Boolean    @default(false)
   dish          Dish       @relation(fields: [dish_id], references: [id], onDelete: Cascade)
   ingredient    Ingredient @relation(fields: [ingredient_id], references: [id], onDelete: Cascade)
 
@@ -144,14 +164,17 @@ model OrderItem {
 }
 
 model Review {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String?  @db.Uuid
-  dish_id    String?  @db.Uuid
-  rating     Int?
-  comment    String?
-  created_at DateTime @default(now())
-  dish       Dish?    @relation(fields: [dish_id], references: [id])
-  user       User?    @relation(fields: [user_id], references: [id])
+  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id      String?    @db.Uuid
+  dish_id      String?    @db.Uuid
+  restaurant_id String?   @db.Uuid
+  rating       Int?
+  comment      String?
+  avatar       String?
+  created_at   DateTime   @default(now())
+  dish         Dish?      @relation(fields: [dish_id], references: [id])
+  restaurant   Restaurant? @relation(fields: [restaurant_id], references: [id])
+  user         User?      @relation(fields: [user_id], references: [id])
 
   @@map("reviews")
 }
@@ -169,6 +192,8 @@ enum DiningType {
 enum OrderStatus {
   PENDING
   CONFIRMED
+  PREPARING
+  READY
   CANCELLED
   COMPLETED
 }

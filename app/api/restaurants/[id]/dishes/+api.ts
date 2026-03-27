@@ -1,28 +1,38 @@
 import { prisma } from '@/lib/prisma';
 
-export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(req: Request, props: any) {
     try {
-        const { id } = params;
+        const id = props.id || props.params?.id;
+        
+        if (!id) {
+            return Response.json({ error: 'Missing ID' }, { status: 400 });
+        }
+
         const dishes = await prisma.dish.findMany({
             where: { restaurant_id: id },
         });
-        return Response.json(dishes);
-    } catch (error) {
+
+        const serializedDishes = dishes.map((dish: any) => ({
+            ...dish,
+            price: dish.price ? Number(dish.price) : 0,
+        }));
+
+        return Response.json(serializedDishes);
+    } catch (error: any) {
         console.error('Fetch dishes error:', error);
-        return Response.json({ error: 'Internal Server Error' }, { status: 500 });
+        return Response.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }
 }
 
-export async function POST(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function POST(req: Request, props: any) {
     try {
-        const { id } = params;
+        const id = props.id || props.params?.id;
         const body = await req.json();
+        
+        if (!id) {
+            return Response.json({ error: 'Missing ID' }, { status: 400 });
+        }
+
         const { 
             name, 
             description, 
@@ -52,7 +62,12 @@ export async function POST(
             },
         });
 
-        return Response.json(dish, { status: 201 });
+        const serializedDish = {
+            ...dish,
+            price: dish.price ? Number(dish.price) : 0,
+        };
+
+        return Response.json(serializedDish, { status: 201 });
     } catch (error: any) {
         console.error('Create dish error:', error);
         return Response.json({ error: error.message || 'Internal Server Error' }, { status: 500 });

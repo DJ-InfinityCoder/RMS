@@ -1,8 +1,9 @@
 import { CustomButton } from '@/components/auth/CustomButton';
 import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { AuthTheme } from '@/constants/AuthTheme';
+import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View, Switch } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View, Switch, TouchableOpacity } from 'react-native';
 
 interface AddDishFormProps {
     restaurantId: string;
@@ -13,6 +14,7 @@ interface AddDishFormProps {
 export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSuccess, onCancel }) => {
     const [formData, setFormData] = useState({
         name: '',
+        category: '',
         description: '',
         price: '',
         cooking_method: '',
@@ -27,6 +29,7 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
     const validate = () => {
         const newErrors: Record<string, string> = {};
         if (!formData.name.trim()) newErrors.name = 'Name is required';
+        if (!formData.category.trim()) newErrors.category = 'Category is required';
         if (!formData.price) newErrors.price = 'Price is required';
         else if (isNaN(parseFloat(formData.price))) newErrors.price = 'Price must be a number';
         
@@ -65,8 +68,18 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
 
     return (
         <View style={styles.mainContainer}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <View style={styles.header}>
                 <Text style={styles.title}>Add New Menu Item</Text>
+                <TouchableOpacity style={styles.closeBtn} onPress={onCancel}>
+                    <Ionicons name="close" size={24} color={AuthTheme.colors.darkNavy} />
+                </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+                showsVerticalScrollIndicator={false} 
+                style={styles.formScroll}
+                contentContainerStyle={styles.formContent}
+            >
                 
                 <CustomTextInput
                     label="Dish Name *"
@@ -74,6 +87,14 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
                     onChangeText={(text) => setFormData({ ...formData, name: text })}
                     error={errors.name}
                     placeholder="e.g. Butter Chicken"
+                />
+
+                <CustomTextInput
+                    label="Category (e.g. Main Course, Starters) *"
+                    value={formData.category}
+                    onChangeText={(text) => setFormData({ ...formData, category: text })}
+                    error={errors.category}
+                    placeholder="e.g. Main Course"
                 />
 
                 <CustomTextInput
@@ -139,22 +160,11 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
                 </View>
 
                 <View style={styles.buttonRow}>
-                    <View style={{ flex: 1, marginRight: 10 }}>
-                        <CustomButton
-                            label="CANCEL"
-                            onPress={onCancel}
-                            disabled={loading}
-                            style={styles.cancelButton}
-                            textStyle={styles.cancelButtonText}
-                        />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                        <CustomButton
-                            label="ADD ITEM"
-                            onPress={handleSubmit}
-                            loading={loading}
-                        />
-                    </View>
+                    <CustomButton
+                        label="ADD ITEM TO MENU"
+                        onPress={handleSubmit}
+                        loading={loading}
+                    />
                 </View>
             </ScrollView>
         </View>
@@ -165,15 +175,30 @@ const styles = StyleSheet.create({
     mainContainer: {
         backgroundColor: '#FFF',
         borderRadius: 20,
-        padding: 20,
-        maxHeight: '90%',
+        maxHeight: '75%',
+        overflow: 'hidden',
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F0F0F0',
     },
     title: {
-        fontSize: 22,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '800',
         color: AuthTheme.colors.darkNavy,
-        marginBottom: 20,
         textAlign: 'center',
+    },
+    formScroll: {
+        paddingHorizontal: 20,
+    },
+    formContent: {
+        paddingTop: 10,
+        paddingBottom: 15,
     },
     row: {
         flexDirection: 'row',
@@ -194,14 +219,13 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     buttonRow: {
-        flexDirection: 'row',
         marginTop: 10,
         marginBottom: 10,
     },
-    cancelButton: {
-        backgroundColor: '#F0F0F0',
-    },
-    cancelButtonText: {
-        color: '#666',
+    closeBtn: {
+        position: 'absolute',
+        right: 15,
+        top: 15,
+        padding: 4,
     },
 });

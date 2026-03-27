@@ -57,7 +57,7 @@ export default function LoginScreen() {
             }
 
             console.log('Login successful:', result.user);
-            router.push('/dashboard' as any);
+            router.push('/(admin)' as any);
         } catch (error) {
             console.error('Login error:', error);
             setErrors({ email: 'An error occurred during login' });
