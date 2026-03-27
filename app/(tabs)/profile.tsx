@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,13 +8,13 @@ import {
     Image,
     Switch,
     Alert,
-    Modal,
-    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useUser } from '@/lib/UserContext';
+import { logout as authLogout } from '@/api/authApi';
+import { getUserOrdersCount } from '@/api/userApi';
 
 // ─── Section Row ─────────────────────────────────────────────────────────────
 
@@ -65,29 +65,11 @@ const ProfileRow: React.FC<RowProps> = ({
 
 export default function Profile() {
     const router = useRouter();
-    const { profile, preferences, loyalty, paymentMethods, updateProfile, canPayCash } = useUser();
+    const { profile, preferences, loyalty, paymentMethods, updateProfile, canPayCash, logout } = useUser();
     const [notifications, setNotifications] = useState(true);
     const [locationAccess, setLocationAccess] = useState(true);
 
-    // ── Edit Profile Modal ──
-    const [editVisible, setEditVisible] = useState(false);
-    const [editName, setEditName] = useState(profile.name);
-    const [editEmail, setEditEmail] = useState(profile.email);
-    const [editPhone, setEditPhone] = useState(profile.phone);
-    const [editAddress, setEditAddress] = useState(profile.address);
-
-    const handleSaveProfile = () => {
-        updateProfile({
-            name: editName,
-            email: editEmail,
-            phone: editPhone,
-            address: editAddress,
-        });
-        setEditVisible(false);
-        Alert.alert('Success', 'Profile updated successfully!');
-    };
-
-    const handleLogout = () => {
+    const handleLogout = async () => {
         Alert.alert(
             'Log Out',
             'Are you sure you want to log out?',
@@ -96,11 +78,27 @@ export default function Profile() {
                 {
                     text: 'Log Out',
                     style: 'destructive',
-                    onPress: () => router.replace('/login' as any),
+                    onPress: async () => {
+                        await authLogout();
+                        await logout();
+                        router.replace('/login' as any);
+                    },
                 },
             ]
         );
     };
+
+    const [ordersCount, setOrdersCount] = useState(0);
+
+    useEffect(() => {
+        const loadStats = async () => {
+            if (profile.id) {
+                const count = await getUserOrdersCount(profile.id);
+                setOrdersCount(count);
+            }
+        };
+        loadStats();
+    }, [profile.id]);
 
     const paymentMethodStr = paymentMethods.map((p) => p.label.split(' ')[0]).join(', ');
 
@@ -134,13 +132,7 @@ export default function Profile() {
                     {/* Edit Profile Button */}
                     <TouchableOpacity
                         style={styles.editProfileBtn}
-                        onPress={() => {
-                            setEditName(profile.name);
-                            setEditEmail(profile.email);
-                            setEditPhone(profile.phone);
-                            setEditAddress(profile.address);
-                            setEditVisible(true);
-                        }}
+                        onPress={() => router.push('/edit-profile' as any)}
                         activeOpacity={0.8}
                     >
                         <Ionicons name="create-outline" size={16} color="#FFF" />
@@ -171,12 +163,12 @@ export default function Profile() {
                 {/* Stats Row */}
                 <View style={styles.statsRow}>
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>24</Text>
+                        <Text style={styles.statNumber}>{ordersCount}</Text>
                         <Text style={styles.statLabel}>Orders</Text>
                     </View>
                     <View style={styles.statDivider} />
                     <View style={styles.statBox}>
-                        <Text style={styles.statNumber}>₹6,820</Text>
+                        <Text style={styles.statNumber}>₹0</Text>
                         <Text style={styles.statLabel}>Total Spent</Text>
                     </View>
                     <View style={styles.statDivider} />
@@ -195,7 +187,7 @@ export default function Profile() {
                         iconColor="#3B82F6"
                         label="Personal Information"
                         value={profile.phone}
-                        onPress={() => setEditVisible(true)}
+                        onPress={() => router.push('/edit-profile' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -204,7 +196,7 @@ export default function Profile() {
                         iconColor="#22C55E"
                         label="Saved Addresses"
                         value={profile.address.split(',')[0]}
-                        onPress={() => { }}
+                        onPress={() => router.push('/edit-profile' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -235,7 +227,7 @@ export default function Profile() {
                         iconColor="#16A34A"
                         label="Dietary Preferences"
                         value={preferences.dietary}
-                        onPress={() => router.push('/settings' as any)}
+                        onPress={() => router.push('/edit-profile' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -244,7 +236,7 @@ export default function Profile() {
                         iconColor="#EF4444"
                         label="Allergies"
                         value={preferences.allergies.length > 0 ? preferences.allergies.join(', ') : 'None set'}
-                        onPress={() => router.push('/settings' as any)}
+                        onPress={() => router.push('/edit-profile' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -253,7 +245,7 @@ export default function Profile() {
                         iconColor="#F59E0B"
                         label="Favourite Cuisines"
                         value={preferences.favouriteCuisines.join(', ')}
-                        onPress={() => router.push('/settings' as any)}
+                        onPress={() => router.push('/edit-profile' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -262,7 +254,7 @@ export default function Profile() {
                         iconColor="#EF4444"
                         label="Spice Level"
                         value={preferences.spiceLevel}
-                        onPress={() => router.push('/settings' as any)}
+                        onPress={() => router.push('/edit-profile' as any)}
                     />
                 </View>
 
@@ -343,63 +335,6 @@ export default function Profile() {
 
                 <Text style={styles.versionText}>RMS App v1.0.0</Text>
             </ScrollView>
-
-            {/* ── Edit Profile Modal ── */}
-            <Modal
-                animationType="slide"
-                transparent
-                visible={editVisible}
-                onRequestClose={() => setEditVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Edit Profile</Text>
-
-                        <Text style={styles.label}>Full Name</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={editName}
-                            onChangeText={setEditName}
-                            placeholder="Your name"
-                        />
-
-                        <Text style={styles.label}>Email</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={editEmail}
-                            onChangeText={setEditEmail}
-                            placeholder="Email address"
-                            keyboardType="email-address"
-                        />
-
-                        <Text style={styles.label}>Phone</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={editPhone}
-                            onChangeText={setEditPhone}
-                            placeholder="Phone number"
-                            keyboardType="phone-pad"
-                        />
-
-                        <Text style={styles.label}>Address</Text>
-                        <TextInput
-                            style={styles.input}
-                            value={editAddress}
-                            onChangeText={setEditAddress}
-                            placeholder="Your address"
-                            multiline
-                        />
-
-                        <TouchableOpacity style={styles.saveBtn} onPress={handleSaveProfile}>
-                            <Text style={styles.saveBtnText}>Save Changes</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditVisible(false)}>
-                            <Text style={styles.cancelBtnText}>Cancel</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
         </SafeAreaView>
     );
 }

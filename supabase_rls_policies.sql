@@ -14,6 +14,13 @@ CREATE POLICY "Users can update own profile" ON users
   FOR UPDATE
   USING (auth.uid() = id);
 
+-- Allow users to insert their own profile
+-- Note: TO authenticated/anon depending on if email confirmation is required.
+-- Using 'public' to allow the signup flow to complete.
+CREATE POLICY "Users can insert own profile" ON users
+  FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
 -- 2. User Food Preferences
 ALTER TABLE user_food_preferences ENABLE ROW LEVEL SECURITY;
 

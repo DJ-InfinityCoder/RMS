@@ -9,9 +9,9 @@
  * Designed for parallel execution where possible.
  */
 
-import { extractTextFromImage } from './ocr';
-import { parseMenuWithLLM, parseMenuFallback, StructuredMenu, Dish } from './llm';
-import { batchSearchImages, getFallbackImage } from './search';
+import { extractTextFromImage } from './ocrApi';
+import { parseMenuWithLLM, parseMenuFallback, StructuredMenu, Dish } from './llmApi';
+import { batchSearchImages, getFallbackImage } from './searchApi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

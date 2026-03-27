@@ -1,8 +1,7 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { getOrders, OrderResponse } from '@/api/orderApi';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-export type OrderStatus = 'placed' | 'prepared' | 'ready';
+export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'CANCELLED' | 'COMPLETED';
 
 export interface OrderItem {
   id: string;
@@ -16,149 +15,124 @@ export interface Order {
   orderId: string;
   restaurantId: string;
   restaurantName: string;
-  restaurantImage: string;
+  restaurantImage?: string;
   items: OrderItem[];
   total: number;
   status: OrderStatus;
   date: string;
-  timestamp: number; // for sorting
-  customerCareNumber: string;
+  timestamp: number;
+  scheduledTime: string;
+  customerCareNumber?: string;
 }
 
 interface OrderContextType {
   orders: Order[];
-  placeOrder: (order: Omit<Order, 'id' | 'orderId' | 'status' | 'timestamp'>) => Order;
-  updateOrderStatus: (id: string, status: OrderStatus) => void;
+  loading: boolean;
+  error: string | null;
+  fetchOrders: () => Promise<void>;
   getOrdersByStatus: (status: OrderStatus) => Order[];
   sortOrdersByTime: (ascending?: boolean) => Order[];
 }
-
-// ─── Status Config ───────────────────────────────────────────────────────────
 
 export const ORDER_STATUS_CONFIG: Record<
   OrderStatus,
   { label: string; color: string; bg: string; icon: string }
 > = {
-  placed: {
-    label: 'Placed',
+  PENDING: {
+    label: 'Pending',
     color: '#3B82F6',
     bg: '#EFF6FF',
     icon: 'receipt-outline',
   },
-  prepared: {
-    label: 'Prepared',
+  CONFIRMED: {
+    label: 'Confirmed',
+    color: '#8B5CF6',
+    bg: '#F5F3FF',
+    icon: 'checkmark-circle-outline',
+  },
+  PREPARING: {
+    label: 'Preparing',
     color: '#F59E0B',
     bg: '#FFFBEB',
     icon: 'restaurant-outline',
   },
-  ready: {
+  READY: {
     label: 'Ready (Take Away)',
     color: '#22C55E',
     bg: '#F0FDF4',
-    icon: 'checkmark-circle-outline',
+    icon: 'checkmark-done-outline',
+  },
+  CANCELLED: {
+    label: 'Cancelled',
+    color: '#EF4444',
+    bg: '#FEF2F2',
+    icon: 'close-circle-outline',
+  },
+  COMPLETED: {
+    label: 'Completed',
+    color: '#6B7280',
+    bg: '#F3F4F6',
+    icon: 'checkmark-done-circle-outline',
   },
 };
 
-// ─── Mock Orders ─────────────────────────────────────────────────────────────
+const mapApiOrderToOrder = (apiOrder: OrderResponse): Order => {
+  const restaurant = Array.isArray(apiOrder.restaurant) ? apiOrder.restaurant[0] : apiOrder.restaurant;
+  const orderItems = Array.isArray(apiOrder.order_items) ? apiOrder.order_items : [];
+  
+  let total = 0;
+  const items: OrderItem[] = orderItems.map((oi: any) => {
+    const dish = Array.isArray(oi.dish) ? oi.dish[0] : oi.dish;
+    const itemTotal = (dish?.price || 0) * (oi.quantity || 1);
+    total += itemTotal;
+    return {
+      id: oi.dish?.id || '',
+      name: dish?.name || 'Unknown Item',
+      price: Number(dish?.price) || 0,
+      qty: oi.quantity || 1,
+    };
+  });
 
-const INITIAL_ORDERS: Order[] = [
-  {
-    id: '1',
-    orderId: '#RMS20260001',
-    restaurantId: '1',
-    restaurantName: 'Rose Garden Restaurant',
-    restaurantImage: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=300&q=70',
-    items: [
-      { id: 'oi1', name: 'Veg Biryani', price: 220, qty: 1 },
-      { id: 'oi2', name: 'Raita', price: 40, qty: 1 },
-      { id: 'oi3', name: 'Gulab Jamun', price: 120, qty: 2 },
-    ],
-    total: 500,
-    status: 'placed',
-    date: 'Today, 10:45 AM',
-    timestamp: Date.now() - 60000 * 30,
-    customerCareNumber: '+91 98765 43210',
-  },
-  {
-    id: '2',
-    orderId: '#RMS20260002',
-    restaurantId: '2',
-    restaurantName: 'American Spicy Burger',
-    restaurantImage: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=300&q=70',
-    items: [
-      { id: 'oi4', name: 'Classic Smash Burger', price: 250, qty: 1 },
-      { id: 'oi5', name: 'Loaded Fries', price: 180, qty: 1 },
-      { id: 'oi6', name: 'Cola Float', price: 120, qty: 1 },
-    ],
-    total: 550,
-    status: 'prepared',
-    date: 'Today, 10:20 AM',
-    timestamp: Date.now() - 60000 * 55,
-    customerCareNumber: '+91 98765 43211',
-  },
-  {
-    id: '3',
-    orderId: '#RMS20260003',
-    restaurantId: '3',
-    restaurantName: 'Pizza Palace',
-    restaurantImage: 'https://images.unsplash.com/photo-1548365328-9f547fb09594?w=300&q=70',
-    items: [
-      { id: 'oi7', name: 'Pepperoni Pizza', price: 450, qty: 1 },
-      { id: 'oi8', name: 'Garlic Bread', price: 150, qty: 1 },
-    ],
-    total: 600,
-    status: 'ready',
-    date: 'Yesterday, 8:30 PM',
-    timestamp: Date.now() - 60000 * 60 * 16,
-    customerCareNumber: '+91 98765 43212',
-  },
-  {
-    id: '4',
-    orderId: '#RMS20260004',
-    restaurantId: '1',
-    restaurantName: 'Rose Garden Restaurant',
-    restaurantImage: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=300&q=70',
-    items: [
-      { id: 'oi9', name: 'Dal Makhani', price: 240, qty: 1 },
-      { id: 'oi10', name: 'Butter Naan', price: 50, qty: 2 },
-      { id: 'oi11', name: 'Mango Lassi', price: 90, qty: 1 },
-    ],
-    total: 430,
-    status: 'ready',
-    date: '2 days ago',
-    timestamp: Date.now() - 60000 * 60 * 48,
-    customerCareNumber: '+91 98765 43210',
-  },
-];
-
-// ─── Context ─────────────────────────────────────────────────────────────────
+  return {
+    id: apiOrder.id,
+    orderId: `#RMS${apiOrder.id.slice(0, 8).toUpperCase()}`,
+    restaurantId: apiOrder.restaurant_id,
+    restaurantName: restaurant?.name || 'Unknown Restaurant',
+    items,
+    total,
+    status: apiOrder.status,
+    date: new Date(apiOrder.created_at).toLocaleDateString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      hour: 'numeric',
+      minute: '2-digit',
+    }),
+    timestamp: new Date(apiOrder.created_at).getTime(),
+    scheduledTime: apiOrder.scheduled_time,
+    customerCareNumber: restaurant?.phone || '',
+  };
+};
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
 
-let orderCounter = 5;
-
 export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const placeOrder = useCallback(
-    (orderData: Omit<Order, 'id' | 'orderId' | 'status' | 'timestamp'>): Order => {
-      const newOrder: Order = {
-        ...orderData,
-        id: String(orderCounter++),
-        orderId: `#RMS2026${String(orderCounter).padStart(4, '0')}`,
-        status: 'placed',
-        timestamp: Date.now(),
-      };
-      setOrders((prev) => [newOrder, ...prev]);
-      return newOrder;
-    },
-    []
-  );
-
-  const updateOrderStatus = useCallback((id: string, status: OrderStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status } : o))
-    );
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const apiOrders = await getOrders();
+      const mappedOrders = apiOrders.map(mapApiOrderToOrder);
+      setOrders(mappedOrders);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch orders');
+      console.error('Error fetching orders:', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const getOrdersByStatus = useCallback(
@@ -181,8 +155,9 @@ export const OrderProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     <OrderContext.Provider
       value={{
         orders,
-        placeOrder,
-        updateOrderStatus,
+        loading,
+        error,
+        fetchOrders,
         getOrdersByStatus,
         sortOrdersByTime,
       }}

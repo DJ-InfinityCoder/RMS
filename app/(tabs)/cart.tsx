@@ -7,12 +7,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart, RestaurantCart } from '@/lib/CartContext';
-import { createTakeawayOrder } from '@/api/orderApi';
+import { createMultipleTakeawayOrders } from '@/api/orderApi';
 
 const generateTimeSlots = (): string[] => {
   const slots: string[] = [];
@@ -28,23 +27,15 @@ const generateTimeSlots = (): string[] => {
     startMinute = 0;
   }
   
-  // Start from next 15-min interval for better UX
-  startMinute = Math.ceil(startMinute / 15) * 15;
-  if (startMinute >= 60) {
-    startHour += 1;
-    startMinute = 0;
-  }
-
-  for (let i = 0; i < 16; i++) {
-    const totalMinutes = startHour * 60 + startMinute + i * 15;
-    const hour = Math.floor(totalMinutes / 60) % 24;
-    const minute = totalMinutes % 60;
+  for (let i = 0; i < 12; i++) {
+    const hour = startHour + i;
+    if (hour >= 24) break;
     
     const period = hour >= 12 ? 'PM' : 'AM';
     const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-    const displayMinute = minute === 0 ? '00' : minute;
+    const minute = startMinute === 0 ? '00' : startMinute;
     
-    slots.push(`${displayHour}:${displayMinute} ${period}`);
+    slots.push(`${displayHour}:${minute} ${period}`);
   }
   
   return slots;
@@ -52,23 +43,20 @@ const generateTimeSlots = (): string[] => {
 
 export default function CartPage() {
   const router = useRouter();
-  const { 
-    getGroupedByRestaurant, 
-    removeItem, 
-    updateItemQty, 
-    setScheduledTime, 
-    clearCart, 
-    clearRestaurantItems 
-  } = useCart();
+  const { getGroupedByRestaurant, removeItem, updateItemQty, setScheduledTime, clearCart, clearRestaurantItems } = useCart();
   
   const [showTimePicker, setShowTimePicker] = useState<string | null>(null);
-  const [loadingRestaurantId, setLoadingRestaurantId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const restaurantGroups = useMemo(() => getGroupedByRestaurant(), [getGroupedByRestaurant]);
   const timeSlots = useMemo(() => generateTimeSlots(), []);
 
   const getTotalForRestaurant = (group: RestaurantCart) => {
     return group.items.reduce((sum, item) => sum + item.price * item.qty, 0);
+  };
+
+  const getGrandTotal = () => {
+    return restaurantGroups.reduce((sum, group) => sum + getTotalForRestaurant(group), 0);
   };
 
   const handleTimeSelect = (restaurantId: string, time: string) => {
@@ -82,7 +70,6 @@ export default function CartPage() {
     const scheduledDate = new Date();
     scheduledDate.setHours(hour, minutes, 0, 0);
     
-    // If time is in the past, assume it's for tomorrow
     if (scheduledDate <= new Date()) {
       scheduledDate.setDate(scheduledDate.getDate() + 1);
     }
@@ -91,42 +78,37 @@ export default function CartPage() {
     setShowTimePicker(null);
   };
 
-  const handlePlaceOrder = async (group: RestaurantCart) => {
-    if (!group.scheduledTime) {
-      Alert.alert('Pickup Time Required', `Please select a pickup time for ${group.restaurantName}`);
+  const handleCheckout = async () => {
+    if (restaurantGroups.length === 0) {
+      Alert.alert('Empty Cart', 'Your cart is empty');
       return;
     }
 
-    setLoadingRestaurantId(group.restaurantId);
+    const missingTime = restaurantGroups.filter((g) => !g.scheduledTime);
+    if (missingTime.length > 0) {
+      Alert.alert(
+        'Pickup Time Required',
+        `Please select a pickup time for: ${missingTime.map((g) => g.restaurantName).join(', ')}`
+      );
+      return;
+    }
+
+    setLoading(true);
     try {
-      const orderItems = group.items.map(item => ({
-        dish_id: item.id,
-        quantity: item.qty
-      }));
-
-      await createTakeawayOrder({
-        restaurantId: group.restaurantId,
-        items: orderItems,
-        scheduledTime: group.scheduledTime,
-      });
-
-      Alert.alert('Success', `Order placed for ${group.restaurantName}!`, [
+      await createMultipleTakeawayOrders(restaurantGroups);
+      Alert.alert('Success', 'Your orders have been placed!', [
         {
-          text: 'View Orders',
+          text: 'OK',
           onPress: () => {
-            clearRestaurantItems(group.restaurantId);
+            clearCart();
             router.push('/(tabs)/orders' as any);
           },
         },
-        {
-          text: 'Continue',
-          onPress: () => clearRestaurantItems(group.restaurantId),
-        }
       ]);
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to place order');
     } finally {
-      setLoadingRestaurantId(null);
+      setLoading(false);
     }
   };
 
@@ -150,7 +132,7 @@ export default function CartPage() {
           <Text style={styles.emptyText}>Your cart is empty</Text>
           <TouchableOpacity
             style={styles.exploreButton}
-            onPress={() => router.push('/(tabs)/' as any)}
+            onPress={() => router.push('/(tabs)/explore' as any)}
           >
             <Text style={styles.exploreButtonText}>Explore Restaurants</Text>
           </TouchableOpacity>
@@ -162,12 +144,7 @@ export default function CartPage() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity onPress={() => router.back()} style={{ marginRight: 12 }}>
-            <Ionicons name="chevron-back" size={24} color="#181C2E" />
-          </TouchableOpacity>
-          <Text style={styles.title}>My Cart</Text>
-        </View>
+        <Text style={styles.title}>My Cart</Text>
         <TouchableOpacity onPress={clearCart}>
           <Text style={styles.clearText}>Clear All</Text>
         </TouchableOpacity>
@@ -190,14 +167,14 @@ export default function CartPage() {
               <Ionicons name="time-outline" size={18} color="#FF7A00" />
               <TouchableOpacity
                 style={styles.timeButton}
-                onPress={() => setShowTimePicker(showTimePicker === group.restaurantId ? null : group.restaurantId)}
+                onPress={() => setShowTimePicker(group.restaurantId)}
               >
                 <Text style={group.scheduledTime ? styles.timeSelected : styles.timePlaceholder}>
                   {group.scheduledTime
                     ? `Pickup at ${formatScheduledTime(group.scheduledTime)}`
                     : 'Select pickup time'}
                 </Text>
-                <Ionicons name={showTimePicker === group.restaurantId ? "chevron-up" : "chevron-down"} size={16} color="#666" />
+                <Ionicons name="chevron-down" size={16} color="#666" />
               </TouchableOpacity>
             </View>
 
@@ -208,14 +185,22 @@ export default function CartPage() {
                     key={time}
                     style={[
                       styles.timeSlot,
-                      group.scheduledTime && formatScheduledTime(group.scheduledTime) === time && styles.timeSlotSelected,
+                      group.scheduledTime?.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      }) === time && styles.timeSlotSelected,
                     ]}
                     onPress={() => handleTimeSelect(group.restaurantId, time)}
                   >
                     <Text
                       style={[
                         styles.timeSlotText,
-                        group.scheduledTime && formatScheduledTime(group.scheduledTime) === time && styles.timeSlotTextSelected,
+                        group.scheduledTime?.toLocaleTimeString('en-US', {
+                          hour: 'numeric',
+                          minute: '2-digit',
+                          hour12: true,
+                        }) === time && styles.timeSlotTextSelected,
                       ]}
                     >
                       {time}
@@ -225,58 +210,53 @@ export default function CartPage() {
               </View>
             )}
 
-            <View style={styles.itemsList}>
-              {group.items.map((item) => (
-                <View key={item.id} style={styles.cartItem}>
-                  <View style={styles.itemInfo}>
-                    <Text style={styles.itemName}>{item.name}</Text>
-                    <Text style={styles.itemPrice}>₹{item.price}</Text>
-                  </View>
-                  <View style={styles.quantityControl}>
-                    <TouchableOpacity
-                      style={styles.qtyButton}
-                      onPress={() => updateItemQty(item.id, item.qty - 1)}
-                    >
-                      <Ionicons name="remove" size={16} color="#FF7A00" />
-                    </TouchableOpacity>
-                    <Text style={styles.qtyText}>{item.qty}</Text>
-                    <TouchableOpacity
-                      style={styles.qtyButton}
-                      onPress={() => updateItemQty(item.id, item.qty + 1)}
-                    >
-                      <Ionicons name="add" size={16} color="#FF7A00" />
-                    </TouchableOpacity>
-                  </View>
+            {group.items.map((item) => (
+              <View key={item.id} style={styles.cartItem}>
+                <View style={styles.itemInfo}>
+                  <Text style={styles.itemName}>{item.name}</Text>
+                  <Text style={styles.itemPrice}>₹{item.price}</Text>
                 </View>
-              ))}
-            </View>
-
-            <View style={styles.sectionFooter}>
-              <View style={styles.restaurantTotal}>
-                <Text style={styles.totalLabel}>Total for {group.restaurantName}</Text>
-                <Text style={styles.totalAmount}>₹{getTotalForRestaurant(group).toFixed(2)}</Text>
+                <View style={styles.quantityControl}>
+                  <TouchableOpacity
+                    style={styles.qtyButton}
+                    onPress={() => updateItemQty(item.id, item.qty - 1)}
+                  >
+                    <Ionicons name="remove" size={16} color="#FF7A00" />
+                  </TouchableOpacity>
+                  <Text style={styles.qtyText}>{item.qty}</Text>
+                  <TouchableOpacity
+                    style={styles.qtyButton}
+                    onPress={() => updateItemQty(item.id, item.qty + 1)}
+                  >
+                    <Ionicons name="add" size={16} color="#FF7A00" />
+                  </TouchableOpacity>
+                </View>
               </View>
-              
-              <TouchableOpacity
-                style={[
-                  styles.orderButton, 
-                  (!group.scheduledTime || loadingRestaurantId !== null) && styles.orderButtonDisabled
-                ]}
-                onPress={() => handlePlaceOrder(group)}
-                disabled={loadingRestaurantId !== null}
-              >
-                {loadingRestaurantId === group.restaurantId ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.orderButtonText}>
-                    Place Order from This Restaurant
-                  </Text>
-                )}
-              </TouchableOpacity>
+            ))}
+
+            <View style={styles.restaurantTotal}>
+              <Text style={styles.totalLabel}>Restaurant Total</Text>
+              <Text style={styles.totalAmount}>₹{getTotalForRestaurant(group).toFixed(2)}</Text>
             </View>
           </View>
         ))}
       </ScrollView>
+
+      <View style={styles.footer}>
+        <View style={styles.grandTotalRow}>
+          <Text style={styles.grandTotalLabel}>Grand Total</Text>
+          <Text style={styles.grandTotalAmount}>₹{getGrandTotal().toFixed(2)}</Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.checkout, loading && styles.checkoutDisabled]}
+          onPress={handleCheckout}
+          disabled={loading}
+        >
+          <Text style={styles.checkoutText}>
+            {loading ? 'Placing Order...' : `Place Orders (${restaurantGroups.length})`}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -284,16 +264,15 @@ export default function CartPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FBFCFF',
+    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#fff',
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F5FA',
+    borderBottomColor: '#F3F3F3',
   },
   title: {
     fontSize: 24,
@@ -306,49 +285,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   scrollContent: {
-    paddingBottom: 40,
+    paddingBottom: 20,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
   },
   emptyText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#A0A5BA',
-    textAlign: 'center',
+    color: '#666',
   },
   exploreButton: {
-    marginTop: 24,
+    marginTop: 20,
     backgroundColor: '#FF7A00',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 12,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
   },
   exploreButtonText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 16,
   },
   restaurantSection: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 20,
     padding: 16,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
+    borderBottomWidth: 8,
+    borderBottomColor: '#F8F9FB',
   },
   restaurantHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   restaurantName: {
     fontSize: 18,
@@ -357,15 +326,15 @@ const styles = StyleSheet.create({
   },
   itemCount: {
     fontSize: 13,
-    color: '#A0A5BA',
+    color: '#666',
     marginTop: 2,
   },
   timeSelector: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F5FA',
+    backgroundColor: '#FFF4E5',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     marginBottom: 12,
   },
   timeButton: {
@@ -376,7 +345,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   timePlaceholder: {
-    color: '#A0A5BA',
+    color: '#666',
     fontSize: 14,
   },
   timeSelected: {
@@ -388,41 +357,35 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 16,
-    backgroundColor: '#FBFCFF',
-    padding: 8,
-    borderRadius: 12,
+    marginBottom: 12,
   },
   timeSlot: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 10,
-    backgroundColor: '#fff',
+    borderRadius: 20,
+    backgroundColor: '#F0F0F0',
     borderWidth: 1,
-    borderColor: '#F0F5FA',
+    borderColor: '#E0E0E0',
   },
   timeSlotSelected: {
     backgroundColor: '#FF7A00',
     borderColor: '#FF7A00',
   },
   timeSlotText: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 13,
+    color: '#666',
     fontWeight: '600',
   },
   timeSlotTextSelected: {
     color: '#fff',
   },
-  itemsList: {
-    marginBottom: 16,
-  },
   cartItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F5FA',
+    borderBottomColor: '#F0F0F0',
   },
   itemInfo: {
     flex: 1,
@@ -434,14 +397,13 @@ const styles = StyleSheet.create({
   },
   itemPrice: {
     fontSize: 14,
-    color: '#FF7A00',
-    fontWeight: '700',
-    marginTop: 4,
+    color: '#666',
+    marginTop: 2,
   },
   quantityControl: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0F5FA',
+    backgroundColor: '#F8F9FB',
     borderRadius: 20,
     paddingHorizontal: 4,
   },
@@ -458,43 +420,59 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#181C2E',
   },
-  sectionFooter: {
-    marginTop: 8,
-  },
   restaurantTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E0E0E0',
+  },
+  totalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  totalAmount: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#181C2E',
+  },
+  footer: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F3F3',
+    backgroundColor: '#fff',
+  },
+  grandTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  totalLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#A0A5BA',
-  },
-  totalAmount: {
-    fontSize: 18,
-    fontWeight: '800',
+  grandTotalLabel: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#181C2E',
   },
-  orderButton: {
+  grandTotalAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FF7A00',
+  },
+  checkout: {
     backgroundColor: '#181C2E',
     padding: 16,
-    borderRadius: 14,
+    borderRadius: 12,
     alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
-  orderButtonDisabled: {
-    backgroundColor: '#A0A5BA',
-    elevation: 0,
+  checkoutDisabled: {
+    opacity: 0.6,
   },
-  orderButtonText: {
+  checkoutText: {
     color: '#fff',
     fontWeight: '700',
-    fontSize: 15,
+    fontSize: 16,
   },
 });
