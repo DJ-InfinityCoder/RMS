@@ -111,6 +111,38 @@ export const SkeletonLoader = {
             </View>
         </View>
     ),
+
+    TableItem: () => (
+        <View style={styles.tableCard}>
+            <SkeletonItem width={76} height={76} borderRadius={15} />
+            <View style={{ flex: 1, marginLeft: 16 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <SkeletonItem width={80} height={12} />
+                    <SkeletonItem width={60} height={16} />
+                </View>
+                <SkeletonItem width="100%" height={8} borderRadius={4} style={{ marginTop: 12 }} />
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 12, marginTop: 12 }}>
+                    <SkeletonItem width={36} height={36} borderRadius={18} />
+                    <SkeletonItem width={36} height={36} borderRadius={18} />
+                </View>
+            </View>
+        </View>
+    ),
+
+    ReviewItem: () => (
+        <View style={styles.reviewCard}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+                <SkeletonItem width={44} height={44} borderRadius={22} />
+                <View style={{ marginLeft: 12, flex: 1 }}>
+                    <SkeletonItem width={120} height={16} />
+                    <SkeletonItem width={80} height={12} style={{ marginTop: 6 }} />
+                </View>
+            </View>
+            <SkeletonItem width="100%" height={12} style={{ marginBottom: 8 }} />
+            <SkeletonItem width="100%" height={12} style={{ marginBottom: 12 }} />
+            <SkeletonItem width={100} height={24} borderRadius={12} />
+        </View>
+    ),
 };
 
 const styles = StyleSheet.create({
@@ -148,5 +180,23 @@ const styles = StyleSheet.create({
     },
     cardBottom: {
         marginTop: 4,
+    },
+    tableCard: {
+        backgroundColor: C.white,
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
+    },
+    reviewCard: {
+        backgroundColor: C.white,
+        borderRadius: 20,
+        padding: 20,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
     },
 });

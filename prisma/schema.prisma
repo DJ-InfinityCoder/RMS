@@ -1,6 +1,7 @@
 generator client {
   provider = "prisma-client-js"
-}
+} 
+
 
 datasource db {
   provider  = "postgresql"
@@ -14,8 +15,11 @@ model User {
   email         String               @unique @db.VarChar(150)
   phone         String?              @unique @db.VarChar(15)
   password_hash String
+  address       String?
   latitude      Decimal?             @db.Decimal(9, 6)
   longitude     Decimal?             @db.Decimal(9, 6)
+  created_at    DateTime             @default(now())
+  updated_at    DateTime             @default(now())
   orders        Order[]
   reviews       Review[]
   preferences   UserFoodPreference[]
@@ -196,4 +200,20 @@ enum OrderStatus {
   READY
   CANCELLED
   COMPLETED
+}
+
+model Vendor {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String   @db.VarChar(150)
+  description  String?
+  critic_score Float?
+  food         String[] @default([])
+  image_url    String?
+  tags         String[] @default([])
+  location     String?  @db.VarChar(255)
+  price_range  String?  @db.VarChar(10)
+  created_at   DateTime @default(now())
+
+  @@index([name])
+  @@map("vendors")
 }

@@ -54,6 +54,30 @@ export default function AdminTabLayout() {
                     ),
                 }}
             />
+            <Tabs.Screen
+                name="tables"
+                options={{
+                    title: 'Tables',
+                    tabBarIcon: ({ color, focused }) => (
+                        <Ionicons name={focused ? 'calendar' : 'calendar-outline'} size={20} color={color} />
+                    ),
+                }}
+            />
+            <Tabs.Screen
+                name="reviews"
+                options={{
+                    title: 'Reviews',
+                    tabBarIcon: ({ color, focused }) => (
+                        <Ionicons name={focused ? 'star' : 'star-outline'} size={20} color={color} />
+                    ),
+                }}
+            />
+            <Tabs.Screen
+                name="offers"
+                options={{
+                    href: null,
+                }}
+            />
         </Tabs>
     );
 }

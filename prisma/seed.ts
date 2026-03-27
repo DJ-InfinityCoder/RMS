@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Seeding started...');
+  console.log('🌱 Massive Seeding started...');
 
   const passwordHash = await bcrypt.hash('password123', 10);
 
@@ -71,7 +71,8 @@ async function main() {
     where: { email: 'admin@tastybites.com' },
     update: {},
     create: {
-      name: 'Tasty Bites',
+      id: 'aa88df4a-8740-4f51-872f-5732155f9889', // Fixed ID for testing
+      name: 'Spice Cave',
       email: 'admin@tastybites.com',
       password_hash: passwordHash,
       description: 'Premium multi-cuisine dining in the heart of Mumbai.',
@@ -82,6 +83,7 @@ async function main() {
       phone: '0221234567',
       image_url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4',
       cuisine: ['Indian', 'Chinese', 'Continental'],
+      is_active: true,
     },
   });
 
@@ -89,7 +91,7 @@ async function main() {
     where: { email: 'admin@spicecave.com' },
     update: {},
     create: {
-      name: 'Spice Cave',
+      name: 'Rajasthani Rasoi',
       email: 'admin@spicecave.com',
       password_hash: passwordHash,
       description: 'Authentic Rajasthani and North Indian flavors.',
@@ -121,6 +123,7 @@ async function main() {
     },
   });
 
+  const restaurants = [r1, r2, r3];
   console.log('✅ 3 restaurants created.');
 
   // ── 3. Ingredients ────────────────────────────────────────
@@ -128,7 +131,8 @@ async function main() {
   const ingredientNames = [
     'Paneer', 'Chicken', 'Tomato', 'Onion', 'Garlic', 'Ginger',
     'Butter', 'Cream', 'Spinach', 'Mushroom', 'Potato', 'Cheese',
-    'Rice', 'Lentils', 'Cumin', 'Coriander',
+    'Rice', 'Lentils', 'Cumin', 'Coriander', 'Avocado', 'Quinoa',
+    'Mutton', 'Red Chili', 'Flour', 'Yogurt',
   ];
   const ingredients: Record<string, any> = {};
   for (const name of ingredientNames) {
@@ -141,308 +145,174 @@ async function main() {
   console.log(`✅ ${ingredientNames.length} ingredients created.`);
 
   // ── 4. Table Slots ────────────────────────────────────────
-  console.log('Creating table slots...');
-  const timeSlots = ['12:00 PM', '01:00 PM', '02:00 PM', '07:00 PM', '08:00 PM', '09:00 PM'];
-  for (const r of [r1, r2, r3]) {
-    const count = await prisma.tableSlot.count({ where: { restaurant_id: r.id } });
-    if (count === 0) {
-      for (const time of timeSlots) {
-        await prisma.tableSlot.create({
-          data: {
-            restaurant_id: r.id,
-            time,
-            total_seats: 20,
-            booked_seats: Math.floor(Math.random() * 12),
-          },
-        });
-      }
+  console.log('Creating comprehensive table slots...');
+  const timeSlots = [
+    '11:00 AM', '12:00 PM', '01:00 PM', '02:00 PM', 
+    '07:00 PM', '08:00 PM', '09:00 PM', '10:00 PM'
+  ];
+  for (const r of restaurants) {
+    await prisma.tableSlot.deleteMany({ where: { restaurant_id: r.id } });
+    for (const time of timeSlots) {
+      await prisma.tableSlot.create({
+        data: {
+          restaurant_id: r.id,
+          time,
+          total_seats: 30,
+          booked_seats: Math.floor(Math.random() * 25),
+        },
+      });
     }
   }
-  console.log('✅ Table slots created.');
+  console.log('✅ 24 table slots created.');
 
   // ── 5. Dishes ─────────────────────────────────────────────
-  console.log('Creating dishes...');
+  console.log('Creating comprehensive dish catalog...');
+  const allDishes = [];
 
-  // --- Tasty Bites dishes ---
-  const d1 = await prisma.dish.create({
-    data: {
-      restaurant_id: r1.id,
-      name: 'Paneer Butter Masala',
-      description: 'Rich, creamy tomato curry with soft paneer cubes.',
-      price: 320.00,
-      category: 'Main Course',
-      calories: 450,
-      cooking_method: 'Slow cooked in tandoor-roasted tomato gravy',
-      image_url: 'https://images.unsplash.com/photo-1631452180519-c014fe946bc7',
-      ingredients: {
-        create: [
-          { ingredient_id: ingredients['Paneer'].id },
-          { ingredient_id: ingredients['Tomato'].id },
-          { ingredient_id: ingredients['Butter'].id },
-          { ingredient_id: ingredients['Cream'].id },
-        ],
-      },
-    },
-  });
-
-  const d2 = await prisma.dish.create({
-    data: {
-      restaurant_id: r1.id,
-      name: 'Butter Chicken',
-      description: 'Tender chicken pieces in a velvety, buttery tomato sauce.',
-      price: 420.00,
-      category: 'Main Course',
-      calories: 550,
-      cooking_method: 'Charcoal grilled, then simmered in makhani gravy',
-      image_url: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398',
-      ingredients: {
-        create: [
-          { ingredient_id: ingredients['Chicken'].id },
-          { ingredient_id: ingredients['Butter'].id },
-          { ingredient_id: ingredients['Cream'].id },
-          { ingredient_id: ingredients['Tomato'].id },
-        ],
-      },
-    },
-  });
-
-  const d3 = await prisma.dish.create({
-    data: {
-      restaurant_id: r1.id,
-      name: 'Dal Makhani',
-      description: 'Black lentils slow-cooked overnight with butter and cream.',
-      price: 280.00,
-      category: 'Main Course',
-      calories: 380,
-      image_url: 'https://images.unsplash.com/photo-1546833998-877b37c2e5c6',
-      ingredients: {
-        create: [
-          { ingredient_id: ingredients['Lentils'].id },
-          { ingredient_id: ingredients['Butter'].id },
-          { ingredient_id: ingredients['Cream'].id },
-        ],
-      },
-    },
-  });
-
-  const d4 = await prisma.dish.create({
-    data: {
-      restaurant_id: r1.id,
-      name: 'Mushroom Risotto',
-      description: 'Creamy Italian rice dish loaded with wild mushrooms.',
-      price: 400.00,
-      category: 'Continental',
-      calories: 400,
-      image_url: 'https://images.unsplash.com/photo-1476124369491-e7addf5db371',
-      ingredients: {
-        create: [
-          { ingredient_id: ingredients['Mushroom'].id },
-          { ingredient_id: ingredients['Cheese'].id },
-          { ingredient_id: ingredients['Garlic'].id },
-        ],
-      },
-    },
-  });
-
-  const d5 = await prisma.dish.create({
-    data: {
-      restaurant_id: r1.id,
-      name: 'Garlic Naan',
-      description: 'Soft tandoori naan topped with garlic and butter.',
-      price: 80.00,
-      category: 'Breads',
-      calories: 200,
-      image_url: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641',
-    },
-  });
-
-  // --- Spice Cave dishes ---
-  const d6 = await prisma.dish.create({
-    data: {
-      restaurant_id: r2.id,
-      name: 'Lal Maas',
-      description: 'Fiery Rajasthani mutton curry with red chilies.',
-      price: 550.00,
-      category: 'Main Course',
-      calories: 650,
-      image_url: 'https://images.unsplash.com/photo-1542367592-8849eb950fd8',
-    },
-  });
-
-  const d7 = await prisma.dish.create({
-    data: {
-      restaurant_id: r2.id,
-      name: 'Rajasthani Thali',
-      description: 'Dal Baati Churma, Gatte ki Sabzi, Ker Sangri and more.',
-      price: 599.00,
-      category: 'Special Thali',
-      calories: 900,
-      image_url: 'https://images.unsplash.com/photo-1589302168068-964664d93dc0',
-    },
-  });
-
-  const d8 = await prisma.dish.create({
-    data: {
-      restaurant_id: r2.id,
-      name: 'Chicken Biryani',
-      description: 'Hyderabadi-style dum biryani layered with aromatic spices.',
-      price: 380.00,
-      category: 'Biryani',
-      calories: 700,
-      image_url: 'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8',
-      ingredients: {
-        create: [
-          { ingredient_id: ingredients['Chicken'].id },
-          { ingredient_id: ingredients['Rice'].id },
-          { ingredient_id: ingredients['Onion'].id },
-        ],
-      },
-    },
-  });
-
-  // --- Green Leaf dishes ---
-  const d9 = await prisma.dish.create({
-    data: {
-      restaurant_id: r3.id,
-      name: 'Avocado Quinoa Bowl',
-      description: 'Protein-packed quinoa with fresh avocado and veggies.',
-      price: 450.00,
-      category: 'Bowls',
-      calories: 350,
-      image_url: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd',
-    },
-  });
-
-  const d10 = await prisma.dish.create({
-    data: {
-      restaurant_id: r3.id,
-      name: 'Spinach Smoothie',
-      description: 'Refreshing green smoothie with spinach, banana and almond milk.',
-      price: 180.00,
-      category: 'Beverages',
-      calories: 150,
-      image_url: 'https://images.unsplash.com/photo-1502741224143-90386d7f8c82',
-    },
-  });
-
-  const dishes = [d1, d2, d3, d4, d5, d6, d7, d8, d9, d10];
-  console.log(`✅ ${dishes.length} dishes created.`);
-
-  // ── 6. Offers ─────────────────────────────────────────────
-  console.log('Creating offers...');
-  await prisma.offer.create({
-    data: {
-      restaurant_id: r1.id,
-      title: 'Grand Opening - 30% OFF',
-      discount_percent: 30,
-      valid_from: new Date(),
-      valid_to: new Date(Date.now() + 30 * 24 * 3600000),
-    },
-  });
-  await prisma.offer.create({
-    data: {
-      restaurant_id: r2.id,
-      title: 'Weekend Special - 15% OFF',
-      discount_percent: 15,
-      valid_from: new Date(),
-      valid_to: new Date(Date.now() + 7 * 24 * 3600000),
-    },
-  });
-  await prisma.offer.create({
-    data: {
-      restaurant_id: r3.id,
-      title: 'Healthy Monday - 20% OFF Bowls',
-      discount_percent: 20,
-      valid_from: new Date(),
-      valid_to: new Date(Date.now() + 14 * 24 * 3600000),
-    },
-  });
-  console.log('✅ 3 offers created.');
-
-  // ── 7. Orders + OrderItems ────────────────────────────────
-  console.log('Creating orders...');
-  const orderConfigs = [
-    // COMPLETED orders (past)
-    { userId: user1.id, restId: r1.id, status: 'COMPLETED',  dish: d1, qty: 2, hoursAgo: 48, dining: 'DINE_IN' },
-    { userId: user1.id, restId: r1.id, status: 'COMPLETED',  dish: d2, qty: 1, hoursAgo: 24, dining: 'DINE_IN' },
-    { userId: user3.id, restId: r2.id, status: 'COMPLETED',  dish: d7, qty: 2, hoursAgo: 72, dining: 'DINE_IN' },
-    { userId: user4.id, restId: r2.id, status: 'COMPLETED',  dish: d8, qty: 2, hoursAgo: 10, dining: 'PICKUP' },
-    // READY orders (food done, awaiting pickup/serve)
-    { userId: user2.id, restId: r1.id, status: 'READY',      dish: d3, qty: 1, hoursAgo: 0, dining: 'PICKUP' },
-    { userId: user4.id, restId: r3.id, status: 'READY',      dish: d9, qty: 2, hoursAgo: 0, dining: 'DINE_IN' },
-    // PREPARING orders (kitchen is cooking)
-    { userId: user1.id, restId: r2.id, status: 'PREPARING',  dish: d6, qty: 1, hoursAgo: 0, dining: 'DINE_IN' },
-    { userId: user3.id, restId: r1.id, status: 'PREPARING',  dish: d4, qty: 1, hoursAgo: 0, dining: 'DINE_IN' },
-    // CONFIRMED orders (accepted by restaurant)
-    { userId: user2.id, restId: r2.id, status: 'CONFIRMED',  dish: d8, qty: 1, hoursAgo: 1, dining: 'PICKUP' },
-    // PENDING orders (just placed)
-    { userId: user3.id, restId: r3.id, status: 'PENDING',    dish: d10, qty: 1, hoursAgo: 0, dining: 'DINE_IN' },
-    { userId: user4.id, restId: r1.id, status: 'PENDING',    dish: d5, qty: 3, hoursAgo: 0, dining: 'DINE_IN' },
-    // CANCELLED order
-    { userId: user4.id, restId: r1.id, status: 'CANCELLED',  dish: d4, qty: 1, hoursAgo: 5, dining: 'DINE_IN' },
+  // Restaurant 1: Spice Cave (Mix of Indian/Continental)
+  const r1Dishes = [
+    { name: 'Paneer Butter Masala', price: 320, cat: 'Main Course', cals: 450, ings: ['Paneer', 'Tomato', 'Butter', 'Cream'] },
+    { name: 'Butter Chicken', price: 420, cat: 'Main Course', cals: 550, ings: ['Chicken', 'Butter', 'Cream', 'Tomato'] },
+    { name: 'Dal Makhani', price: 280, cat: 'Main Course', cals: 380, ings: ['Lentils', 'Butter', 'Cream'] },
+    { name: 'Mushroom Risotto', price: 400, cat: 'Continental', cals: 400, ings: ['Mushroom', 'Cheese', 'Garlic'] },
+    { name: 'Garlic Naan', price: 80, cat: 'Breads', cals: 200, ings: ['Flour', 'Garlic', 'Butter'] },
   ];
 
-  for (const cfg of orderConfigs) {
-    const order = await prisma.order.create({
+  // Restaurant 2: Rajasthani Rasoi
+  const r2Dishes = [
+    { name: 'Lal Maas', price: 550, cat: 'Main Course', cals: 650, ings: ['Mutton', 'Red Chili', 'Yogurt'] },
+    { name: 'Rajasthani Thali', price: 599, cat: 'Special Thali', cals: 900, ings: ['Flour', 'Lentils', 'Butter', 'Paneer'] },
+    { name: 'Chicken Biryani', price: 380, cat: 'Biryani', cals: 700, ings: ['Chicken', 'Rice', 'Onion'] },
+    { name: 'Gatte ki Sabzi', price: 250, cat: 'Specialty', cals: 300, ings: ['Yogurt', 'Onion', 'Garlic'] },
+    { name: 'Dal Baati', price: 350, cat: 'Specialty', cals: 800, ings: ['Lentils', 'Flour', 'Butter'] },
+  ];
+
+  // Restaurant 3: Green Leaf Cafe
+  const r3Dishes = [
+    { name: 'Avocado Quinoa Bowl', price: 450, cat: 'Bowls', cals: 350, ings: ['Avocado', 'Quinoa', 'Tomato'] },
+    { name: 'Spinach Smoothie', price: 180, cat: 'Beverages', cals: 150, ings: ['Spinach', 'Yogurt'] },
+    { name: 'Mushroom Salad', price: 220, cat: 'Salads', cals: 120, ings: ['Mushroom', 'Spinach', 'Onion'] },
+    { name: 'Garlic Potato Wedges', price: 150, cat: 'Starters', cals: 250, ings: ['Potato', 'Garlic'] },
+    { name: 'Cheese Quinoa Patty', price: 300, cat: 'Starters', cals: 320, ings: ['Quinoa', 'Cheese', 'Onion'] },
+  ];
+
+  const createDishesSet = async (restId: string, dataset: any[]) => {
+    const created = [];
+    for (const item of dataset) {
+      const dish = await prisma.dish.create({
+        data: {
+          restaurant_id: restId,
+          name: item.name,
+          price: item.price,
+          category: item.cat,
+          calories: item.cals,
+          description: `Freshly prepared ${item.name} with premium ingredients.`,
+          ingredients: {
+            create: item.ings?.map((ingName: string) => ({
+              ingredient_id: ingredients[ingName].id,
+            })) || [],
+          },
+        },
+      });
+      created.push(dish);
+    }
+    return created;
+  };
+
+  const dr1 = await createDishesSet(r1.id, r1Dishes);
+  const dr2 = await createDishesSet(r2.id, r2Dishes);
+  const dr3 = await createDishesSet(r3.id, r3Dishes);
+  allDishes.push(...dr1, ...dr2, ...dr3);
+  console.log(`✅ ${allDishes.length} dishes created with ingredient mappings.`);
+
+  // ── 6. Offers ─────────────────────────────────────────────
+  console.log('Creating multi-state offers...');
+  for (const r of restaurants) {
+    // Active Offer
+    await prisma.offer.create({
       data: {
-        user_id: cfg.userId,
-        restaurant_id: cfg.restId,
-        status: cfg.status as any,
-        dining_option: cfg.dining as any,
-        created_at: new Date(Date.now() - cfg.hoursAgo * 3600000),
+        restaurant_id: r.id,
+        title: 'Special 20% Discount',
+        discount_percent: 20,
+        valid_from: new Date(),
+        valid_to: new Date(Date.now() + 15 * 24 * 3600000),
+        is_active: true,
       },
     });
+    // Expired Offer
+    await prisma.offer.create({
+      data: {
+        restaurant_id: r.id,
+        title: 'New Year Blast 50%',
+        discount_percent: 50,
+        valid_from: new Date(Date.now() - 60 * 24 * 3600000),
+        valid_to: new Date(Date.now() - 30 * 24 * 3600000),
+        is_active: false,
+      },
+    });
+    // Upcoming Offer
+    await prisma.offer.create({
+      data: {
+        restaurant_id: r.id,
+        title: 'IPL Final Craze 25%',
+        discount_percent: 25,
+        valid_from: new Date(Date.now() + 30 * 24 * 3600000),
+        valid_to: new Date(Date.now() + 45 * 24 * 3600000),
+        is_active: true,
+      },
+    });
+  }
+  console.log('✅ 9 offers (Active, Expired, Upcoming) created.');
+
+  // ── 7. Orders ─────────────────────────────────────────────
+  console.log('Creating rich order history...');
+  const statuses = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'];
+  for (let i = 0; i < 40; i++) {
+    const rest = restaurants[i % 3];
+    const user = users[i % 4];
+    const status = statuses[i % 6];
+    const dishSet = rest.id === r1.id ? dr1 : (rest.id === r2.id ? dr2 : dr3);
+    
+    const order = await prisma.order.create({
+      data: {
+        user_id: user.id,
+        restaurant_id: rest.id,
+        status: status as any,
+        dining_option: i % 2 === 0 ? 'DINE_IN' : 'PICKUP',
+        created_at: new Date(Date.now() - (i % 10) * 24 * 3600000),
+      },
+    });
+
     await prisma.orderItem.create({
       data: {
         order_id: order.id,
-        dish_id: cfg.dish.id,
-        quantity: cfg.qty,
+        dish_id: dishSet[i % 5].id,
+        quantity: (i % 3) + 1,
       },
     });
   }
-  console.log(`✅ ${orderConfigs.length} orders created.`);
+  console.log('✅ 40 orders with item breakdown created.');
 
   // ── 8. Reviews ────────────────────────────────────────────
-  console.log('Creating reviews...');
-  const reviewConfigs = [
-    { userId: user1.id, restId: r1.id, dishId: d1.id, rating: 5, comment: 'Best paneer masala in town!', avatar: 'https://i.pravatar.cc/150?u=dilip' },
-    { userId: user2.id, restId: r1.id, dishId: d2.id, rating: 4, comment: 'Butter chicken was superb.', avatar: 'https://i.pravatar.cc/150?u=rahul' },
-    { userId: user3.id, restId: r2.id, dishId: null,  rating: 5, comment: 'Authentic Rajasthani flavors!', avatar: 'https://i.pravatar.cc/150?u=priya' },
-    { userId: user4.id, restId: r2.id, dishId: d8.id, rating: 4, comment: 'Biryani was fragrant and tasty.', avatar: 'https://i.pravatar.cc/150?u=amit' },
-    { userId: user1.id, restId: r3.id, dishId: d9.id, rating: 5, comment: 'Love the quinoa bowl, so fresh!', avatar: 'https://i.pravatar.cc/150?u=dilip2' },
-    { userId: user2.id, restId: r3.id, dishId: null,  rating: 3, comment: 'Good healthy options but portions could be bigger.', avatar: 'https://i.pravatar.cc/150?u=rahul2' },
-  ];
-
-  for (const rv of reviewConfigs) {
-    await prisma.review.create({
-      data: {
-        user_id: rv.userId,
-        restaurant_id: rv.restId,
-        dish_id: rv.dishId,
-        rating: rv.rating,
-        comment: rv.comment,
-        avatar: rv.avatar,
-      },
-    });
+  console.log('Creating customer reviews...');
+  for (const r of restaurants) {
+    for (let i = 1; i <= 5; i++) {
+        await prisma.review.create({
+            data: {
+                user_id: users[i % 4].id,
+                restaurant_id: r.id,
+                rating: 5 - (i % 2),
+                comment: i % 2 === 0 ? 'Excellent food and service!' : 'Really enjoyed the flavors, will come back again.',
+                avatar: `https://i.pravatar.cc/150?u=${r.id.slice(0,4)}${i}`,
+            }
+        });
+    }
   }
-  console.log(`✅ ${reviewConfigs.length} reviews created.`);
+  console.log('✅ 15 reviews created.');
 
-  // ── 9. User Food Preferences ──────────────────────────────
-  console.log('Creating user food preferences...');
-  await prisma.userFoodPreference.create({
-    data: { user_id: user1.id, ingredient_name: 'Peanuts', is_allergy: true },
-  });
-  await prisma.userFoodPreference.create({
-    data: { user_id: user2.id, ingredient_name: 'Mushroom', is_dislike: true },
-  });
-  await prisma.userFoodPreference.create({
-    data: { user_id: user3.id, ingredient_name: 'Gluten', is_allergy: true },
-  });
-  console.log('✅ Food preferences created.');
-
-  // ── 10. QR Codes ──────────────────────────────────────────
-  console.log('Creating QR codes...');
-  for (const r of [r1, r2, r3]) {
+  // ── 9. QR Codes ──────────────────────────────────────────
+  console.log('Updating QR codes...');
+  for (const r of restaurants) {
     await prisma.restaurantQRCode.upsert({
       where: { restaurant_id: r.id },
       update: {},
@@ -452,9 +322,9 @@ async function main() {
       },
     });
   }
-  console.log('✅ QR codes created.');
+  console.log('✅ QR codes verified for all.');
 
-  console.log('\n🎉 Seeding completed successfully!');
+  console.log('\n🚀 THE WORLD OF RMS HAS BEEN FULLY SEEDED! 🚀');
 }
 
 main()
