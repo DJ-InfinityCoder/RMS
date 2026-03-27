@@ -13,49 +13,67 @@ const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface MenuItem {
-  id: string;
+export interface Ingredient {
   name: string;
-  description: string;
-  price: string;
-  category: string;
+  quantity?: string;
+  description?: string;
 }
 
-export interface MenuSection {
-  title: string;
-  items: MenuItem[];
+export interface Dish {
+  id: string;
+  restaurant_id: string;
+  name: string;
+  description?: string;
+  cooking_method?: string;
+  calories?: number;
+  price?: number;
+  recommended_for?: string;
+  image_url?: string;
+  is_available: boolean;
+  ingredients: Ingredient[];
 }
 
 export interface StructuredMenu {
   restaurantName: string;
-  sections: MenuSection[];
+  dishes: Dish[];
 }
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are a precision menu parser AI. You receive raw OCR text from a restaurant menu photo and must return ONLY valid JSON.
+const SYSTEM_PROMPT = `You are a senior product designer and culinary AI. You receive raw OCR text from a restaurant menu photo and must return a structured list of dishes.
 
 Your tasks:
-1. FIX all OCR errors, typos, and garbled characters
-2. IDENTIFY menu sections (Starters, Appetizers, Main Course, Soups, Salads, Drinks, Beverages, Desserts, Sides, Combos, Specials, etc.)
-3. EXTRACT each item's name, price, and description
-4. If no description is visible, generate a brief appetizing one (1 sentence max)
-5. Normalize prices (keep original currency symbol, format as "₹120" or "$9.99")
-6. If you cannot determine the restaurant name, use "Menu"
+1. FIX all OCR errors, typos, and garbled characters.
+2. EXTRACT each dish's name, price, and description. 
+3. ENRICH data: Use your knowledge to infer realistic Ingredients (with quantities and flavor descriptions), Cooking Method, and a rough Calorie estimate.
+4. NORMALIZE: Clean dish names (e.g., "Margarita Pizzza" -> "Margherita Pizza").
+5. EXTRACT ONLY important and relevant information. Do NOT hallucinate unknown values. 
 
 RETURN FORMAT (strict JSON, no markdown, no code fences):
 {
   "restaurantName": "string",
-  "sections": [
+  "dishes": [
     {
-      "title": "Section Name",
-      "items": [
+      "id": "item_1",
+      "restaurant_id": "current",
+      "name": "Margherita Pizza",
+      "description": "Classic Italian pizza with tomato and mozzarella",
+      "cooking_method": "Wood-fired oven",
+      "calories": 800,
+      "price": 450,
+      "recommended_for": "Lunch, Dinner", 
+      "image_url": null,
+      "is_available": true,
+      "ingredients": [
         {
-          "id": "unique_id",
-          "name": "Item Name",
-          "description": "Brief description",
-          "price": "₹120",
-          "category": "Section Name"
+          "name": "Buffalo Mozzarella",
+          "quantity": "100g",
+          "description": "adds creaminess"
+        },
+        {
+          "name": "Tomato Basil Sauce",
+          "quantity": "50ml",
+          "description": "tangy and fragrant"
         }
       ]
     }
@@ -63,12 +81,10 @@ RETURN FORMAT (strict JSON, no markdown, no code fences):
 }
 
 RULES:
-- Return ONLY the JSON object, nothing else
-- Every item MUST have name and price
-- Group items into logical sections even if the menu doesn't have clear headers
-- If unsure about a section, use "Specials"
-- Generate IDs as section_index (e.g., "starter_1", "main_3")
-- Keep items in the order they appear`;
+- If a price exists as "₹120", return 120 (number).
+- Ingredients must be realistic for the specific dish.
+- If missing data (e.g. price not found), return null for that field. 
+- Return ONLY the JSON object.`;
 
 // ─── LLM Call ─────────────────────────────────────────────────────────────────
 
@@ -131,18 +147,18 @@ export async function parseMenuWithLLM(
     const parsed: StructuredMenu = JSON.parse(cleaned);
 
     // Validate structure
-    if (!parsed.sections || !Array.isArray(parsed.sections)) {
-      throw new Error('Invalid menu structure');
+    if (!parsed.dishes || !Array.isArray(parsed.dishes)) {
+      throw new Error('Invalid menu structure: Missing dishes array');
     }
 
     // Ensure all items have IDs
-    parsed.sections.forEach((section, si) => {
-      section.items.forEach((item, ii) => {
-        if (!item.id) {
-          item.id = `${section.title.toLowerCase().replace(/\s+/g, '_')}_${ii + 1}`;
-        }
-        item.category = section.title;
-      });
+    parsed.dishes.forEach((dish, di) => {
+      if (!dish.id) {
+        dish.id = `dish_${di + 1}`;
+      }
+      if (!dish.restaurant_id) {
+        dish.restaurant_id = 'scanned';
+      }
     });
 
     return parsed;
@@ -167,15 +183,16 @@ export function parseMenuFallback(rawText: string): StructuredMenu {
     .map((l) => l.trim())
     .filter((l) => l.length > 1);
 
-  const PRICE_RE = /[₹$£€]?\s*\d[\d,]*(\.\d{1,2})?|Rs\.?\s*\d+/i;
-  const items: MenuItem[] = [];
+  const PRICE_RE = /[₹$£€]?\s*(\d[\d,]*(\.\d{1,2})?)|Rs\.?\s*(\d+)/i;
+  const dishes: Dish[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!PRICE_RE.test(line)) continue;
 
     const priceMatch = line.match(PRICE_RE);
-    const rawPrice = priceMatch ? priceMatch[0].trim() : '';
+    const rawPrice = priceMatch ? priceMatch[0].replace(/[^0-9.]/g, '') : null;
+    const price = rawPrice ? parseFloat(rawPrice) : null;
 
     const prevLine = i > 0 ? lines[i - 1] : '';
     const nameCandidate = prevLine.replace(/[₹$£€\d.,/\\%@!#*=_]+/g, '').trim();
@@ -189,20 +206,22 @@ export function parseMenuFallback(rawText: string): StructuredMenu {
       : nextLine.replace(/[₹$£€\d.,]+/g, '').trim();
 
     const name = toTitleCase(nameCandidate);
-    items.push({
-      id: `item_${items.length + 1}`,
+    dishes.push({
+      id: `dish_${dishes.length + 1}`,
+      restaurant_id: 'scanned',
       name,
       description: descCandidate.length > 3
         ? toTitleCase(descCandidate)
-        : `A delicious serving of ${name}`,
-      price: formatPrice(rawPrice),
-      category: 'Menu Items',
+        : `A delicious selection of gourmet ${name}`,
+      price: price || undefined,
+      is_available: true,
+      ingredients: [],
     });
   }
 
   return {
     restaurantName: 'Scanned Menu',
-    sections: [{ title: 'Menu Items', items }],
+    dishes,
   };
 }
 

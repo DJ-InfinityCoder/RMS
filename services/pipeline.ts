@@ -10,7 +10,7 @@
  */
 
 import { extractTextFromImage } from './ocr';
-import { parseMenuWithLLM, parseMenuFallback, StructuredMenu, MenuItem } from './llm';
+import { parseMenuWithLLM, parseMenuFallback, StructuredMenu, Dish } from './llm';
 import { batchSearchImages, getFallbackImage } from './search';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -45,7 +45,7 @@ export interface PipelineResult {
  * @returns            Structured menu with images
  */
 export async function runMenuPipeline(
-  base64Image: string,
+  imageUri: string,
   onProgress?: (progress: PipelineProgress) => void
 ): Promise<PipelineResult> {
   const startTime = Date.now();
@@ -58,7 +58,7 @@ export async function runMenuPipeline(
       progress: 15,
     });
 
-    const rawText = await extractTextFromImage(base64Image);
+    const rawText = await extractTextFromImage(imageUri);
 
     if (!rawText.trim()) {
       throw new Error('No text found in image. Please try a clearer photo.');
@@ -80,10 +80,7 @@ export async function runMenuPipeline(
     }
 
     // Validate we got items
-    const totalItems = menu.sections.reduce(
-      (sum, s) => sum + s.items.length,
-      0
-    );
+    const totalItems = menu.dishes.length;
 
     if (totalItems === 0) {
       throw new Error(
@@ -98,21 +95,13 @@ export async function runMenuPipeline(
       progress: 70,
     });
 
-    // Collect all item names for batch search
-    const allItems: MenuItem[] = [];
-    menu.sections.forEach((section) => {
-      section.items.forEach((item) => allItems.push(item));
-    });
-
-    const queries = allItems.map((item) => item.name);
+    // Collect all dish names for batch search
+    const queries = menu.dishes.map((dish) => dish.name);
     const imageMap = await batchSearchImages(queries, 5);
 
-    // Attach images to items
-    menu.sections.forEach((section) => {
-      section.items.forEach((item) => {
-        (item as any).imageUrl =
-          imageMap.get(item.name) ?? getFallbackImage(item.name);
-      });
+    // Attach images to dishes
+    menu.dishes.forEach((dish) => {
+      dish.image_url = imageMap.get(dish.name) ?? getFallbackImage(dish.name);
     });
 
     // ── Complete ──
