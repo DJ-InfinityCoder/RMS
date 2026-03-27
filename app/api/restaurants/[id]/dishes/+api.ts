@@ -7,7 +7,7 @@ export async function GET(
     try {
         const { id } = params;
         const dishes = await prisma.dish.findMany({
-            where: { restaurant_id: id, is_available: true },
+            where: { restaurant_id: id },
         });
         return Response.json(dishes);
     } catch (error) {

@@ -7,6 +7,8 @@ interface CustomButtonProps {
     onPress: () => void;
     loading?: boolean;
     disabled?: boolean;
+    style?: any;
+    textStyle?: any;
 }
 
 export const CustomButton: React.FC<CustomButtonProps> = ({
@@ -14,10 +16,12 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
     onPress,
     loading = false,
     disabled = false,
+    style,
+    textStyle,
 }) => {
     return (
         <TouchableOpacity
-            style={[styles.button, disabled && styles.buttonDisabled]}
+            style={[styles.button, style, disabled && styles.buttonDisabled]}
             onPress={onPress}
             disabled={disabled || loading}
             activeOpacity={0.8}
@@ -25,7 +29,7 @@ export const CustomButton: React.FC<CustomButtonProps> = ({
             {loading ? (
                 <ActivityIndicator color={AuthTheme.colors.white} />
             ) : (
-                <Text style={styles.buttonText}>{label}</Text>
+                <Text style={[styles.buttonText, textStyle]}>{label}</Text>
             )}
         </TouchableOpacity>
     );
