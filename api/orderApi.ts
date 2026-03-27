@@ -41,6 +41,9 @@ export const getOrders = async (): Promise<OrderResponse[]> => {
     throw new Error('User not authenticated');
   }
 
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
   const { data, error } = await supabase
     .from('orders')
     .select(`
@@ -65,6 +68,7 @@ export const getOrders = async (): Promise<OrderResponse[]> => {
       )
     `)
     .eq('user_id', userId)
+    .gt('created_at', thirtyDaysAgo.toISOString())
     .order('created_at', { ascending: false });
 
   if (error) {

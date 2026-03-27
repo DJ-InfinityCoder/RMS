@@ -118,6 +118,8 @@ export default function ScannerScreen() {
     if (!isScanning) return;
 
     const restaurantId = parseQRValue(data);
+    console.log("Scanned QR Data:", data);
+    console.log("Parsed Restaurant ID:", restaurantId);
 
     if (!restaurantId) {
       setIsScanning(false);
@@ -148,7 +150,7 @@ export default function ScannerScreen() {
     setSelectedRestaurant(restaurantId);
     
     setTimeout(() => {
-      router.replace('/restaurant' as any);
+      router.replace(`/restaurant/${restaurantId}` as any);
     }, 500);
   };
   // ─── Gallery Pick ───────────────────────────────────────────────────────────

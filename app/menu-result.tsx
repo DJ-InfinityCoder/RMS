@@ -16,8 +16,8 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StructuredMenu, Dish, Ingredient } from '@/services/llm';
-import { getFallbackImage } from '@/services/search';
+import { StructuredMenu, Dish, Ingredient } from '@/api/llmApi';
+import { getFallbackImage } from '@/api/searchApi';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -144,7 +144,7 @@ const DishCard = ({
             <View style={styles.divider} />
             <Text style={styles.ingredientTitle}>Key Ingredients & Flavors</Text>
             <View style={styles.ingredientList}>
-              {dish.ingredients.map((ing, i) => (
+              {dish.ingredients.map((ing: any, i: number) => (
                 <View key={i} style={styles.ingredientBadge}>
                   <Text style={styles.ingredientName}>{ing.name}</Text>
                   {ing.description && (
@@ -158,7 +158,7 @@ const DishCard = ({
 
         <View style={styles.cardFooter}>
           <View style={styles.tagRow}>
-            {dish.recommended_for?.split(',').map((tag, i) => (
+            {dish.recommended_for?.split(',').map((tag: any, i: number) => (
               <View key={i} style={styles.tag}>
                 <Text style={styles.tagText}>{tag.trim()}</Text>
               </View>
@@ -209,7 +209,7 @@ export default function MenuResultScreen() {
     if (!searchQuery.trim()) return menu.dishes;
     const q = searchQuery.toLowerCase();
     return menu.dishes.filter(
-      (d) => 
+      (d: any) => 
         d.name.toLowerCase().includes(q) || 
         d.description?.toLowerCase().includes(q)
     );

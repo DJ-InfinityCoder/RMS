@@ -10,7 +10,7 @@ const INACTIVE = '#A0A5BA';
 
 export default function TabLayout() {
   const { items } = useCart();
-  const cartCount = items.length;
+  const cartCount = items.reduce((sum, item) => sum + item.qty, 0);
 
   return (
     <Tabs
@@ -24,7 +24,7 @@ export default function TabLayout() {
         tabBarItemStyle: styles.tabItem,
       }}
     >
-      {/* 1 — Home (Restaurants) */}
+      {/* 1 — Home */}
       <Tabs.Screen
         name="index"
         options={{
@@ -45,7 +45,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon focused={focused} color={color}>
               <MaterialCommunityIcons
-                name={focused ? 'cart' : 'cart-outline'}
+                name={focused ? 'store' : 'store-outline'}
                 size={22}
                 color={color}
               />
@@ -54,7 +54,20 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 3 — Orders */}
+      {/* 3 — Cart */}
+      <Tabs.Screen
+        name="cart"
+        options={{
+          title: 'Cart',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon focused={focused} color={color} badge={cartCount}>
+              <Ionicons name={focused ? 'cart' : 'cart-outline'} size={22} color={color} />
+            </TabIcon>
+          ),
+        }}
+      />
+
+      {/* 4 — Orders */}
       <Tabs.Screen
         name="orders"
         options={{
@@ -62,7 +75,7 @@ export default function TabLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon focused={focused} color={color}>
               <MaterialCommunityIcons
-                name={focused ? 'receipt' : 'receipt-outline'}
+                name={focused ? 'clipboard-text' : 'clipboard-text-outline'}
                 size={22}
                 color={color}
               />
@@ -71,7 +84,7 @@ export default function TabLayout() {
         }}
       />
 
-      {/* 4 — Profile */}
+      {/* 5 — Profile */}
       <Tabs.Screen
         name="profile"
         options={{
@@ -82,12 +95,6 @@ export default function TabLayout() {
             </TabIcon>
           ),
         }}
-      />
-
-      {/* Hide the legacy explore tab */}
-      <Tabs.Screen
-        name="explore"
-        options={{ href: null }}
       />
     </Tabs>
   );
@@ -109,13 +116,12 @@ const TabIcon = ({
   <View style={tabIconStyles.wrapper}>
     <View style={[tabIconStyles.iconContainer, focused && tabIconStyles.iconContainerActive]}>
       {children}
-      {badge && badge > 0 && (
+      {badge != null && badge > 0 && (
         <View style={tabIconStyles.badge}>
           <Text style={tabIconStyles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
         </View>
       )}
     </View>
-    {focused && <View style={tabIconStyles.dot} />}
   </View>
 );
 

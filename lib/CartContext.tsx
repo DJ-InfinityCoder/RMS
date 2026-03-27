@@ -1,4 +1,8 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { storage } from './storage';
+
+const CART_STORAGE_KEY = 'rms_cart_items';
+const SCHEDULE_STORAGE_KEY = 'rms_scheduled_times';
 
 export interface CartItem {
   id: string;
@@ -25,6 +29,7 @@ type CartContextType = {
   setScheduledTime: (restaurantId: string, time: Date) => void;
   clearCart: () => void;
   clearRestaurantItems: (restaurantId: string) => void;
+  getItemQty: (id: string) => number;
 };
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -32,6 +37,44 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [scheduledTimes, setScheduledTimes] = useState<Record<string, Date>>({});
+  const [loaded, setLoaded] = useState(false);
+
+  // ─── Load cart from storage on mount ─────────────────────────────────────
+  useEffect(() => {
+    const loadCart = async () => {
+      try {
+        const savedItems = await storage.getItem(CART_STORAGE_KEY);
+        if (savedItems) {
+          setItems(JSON.parse(savedItems));
+        }
+        const savedSchedule = await storage.getItem(SCHEDULE_STORAGE_KEY);
+        if (savedSchedule) {
+          const parsed = JSON.parse(savedSchedule);
+          const hydrated: Record<string, Date> = {};
+          for (const key of Object.keys(parsed)) {
+            hydrated[key] = new Date(parsed[key]);
+          }
+          setScheduledTimes(hydrated);
+        }
+      } catch (e) {
+        console.log('Cart load error:', e);
+      } finally {
+        setLoaded(true);
+      }
+    };
+    loadCart();
+  }, []);
+
+  // ─── Persist cart on changes ────────────────────────────────────────────
+  useEffect(() => {
+    if (!loaded) return;
+    storage.setItem(CART_STORAGE_KEY, JSON.stringify(items));
+  }, [items, loaded]);
+
+  useEffect(() => {
+    if (!loaded) return;
+    storage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(scheduledTimes));
+  }, [scheduledTimes, loaded]);
 
   const getGroupedByRestaurant = useCallback((): RestaurantCart[] => {
     const grouped = items.reduce((acc, item) => {
@@ -93,6 +136,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   }, []);
 
+  const getItemQty = useCallback((id: string): number => {
+    const item = items.find((p) => p.id === id);
+    return item ? item.qty : 0;
+  }, [items]);
+
   return (
     <CartContext.Provider
       value={{
@@ -104,6 +152,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setScheduledTime,
         clearCart,
         clearRestaurantItems,
+        getItemQty,
       }}
     >
       {children}

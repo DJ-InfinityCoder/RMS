@@ -1,6 +1,5 @@
 import React, { useState, useMemo } from 'react';
 import {
-  SafeAreaView,
   View,
   Text,
   StyleSheet,
@@ -8,37 +7,26 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart, RestaurantCart } from '@/lib/CartContext';
 import { createMultipleTakeawayOrders } from '@/api/orderApi';
+import { notifyOrderStatus } from '@/utils/notifications';
+import { openUPIPayment } from '@/lib/upiPayment';
 
 const generateTimeSlots = (): string[] => {
-  const slots: string[] = [];
-  const now = new Date();
-  const currentHour = now.getHours();
-  const currentMinute = now.getMinutes();
-  
-  let startHour = currentHour;
-  let startMinute = currentMinute + 30;
-  
-  if (startMinute >= 60) {
-    startHour += 1;
-    startMinute = 0;
-  }
-  
-  for (let i = 0; i < 12; i++) {
-    const hour = startHour + i;
-    if (hour >= 24) break;
-    
-    const period = hour >= 12 ? 'PM' : 'AM';
-    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
-    const minute = startMinute === 0 ? '00' : startMinute;
-    
-    slots.push(`${displayHour}:${minute} ${period}`);
-  }
-  
-  return slots;
+  return [
+    '10:00 AM',
+    '12:00 PM',
+    '06:00 PM',
+    '07:00 PM',
+    '08:00 PM',
+    '09:00 PM',
+    '10:00 PM',
+    '11:00 PM',
+    '12:00 AM'
+  ];
 };
 
 export default function CartPage() {
@@ -78,36 +66,64 @@ export default function CartPage() {
     setShowTimePicker(null);
   };
 
-  const handleCheckout = async () => {
-    if (restaurantGroups.length === 0) {
-      Alert.alert('Empty Cart', 'Your cart is empty');
-      return;
-    }
-
-    const missingTime = restaurantGroups.filter((g) => !g.scheduledTime);
-    if (missingTime.length > 0) {
-      Alert.alert(
-        'Pickup Time Required',
-        `Please select a pickup time for: ${missingTime.map((g) => g.restaurantName).join(', ')}`
-      );
+  const handlePlaceOrder = async (group: RestaurantCart) => {
+    if (!group.scheduledTime) {
+      Alert.alert('Pickup Time Required', `Please select a pickup time for ${group.restaurantName}`);
       return;
     }
 
     setLoading(true);
     try {
-      await createMultipleTakeawayOrders(restaurantGroups);
-      Alert.alert('Success', 'Your orders have been placed!', [
-        {
-          text: 'OK',
-          onPress: () => {
-            clearCart();
-            router.push('/(tabs)/orders' as any);
+      // 1. Open UPI Payment App
+      const amount = getTotalForRestaurant(group);
+      const paid = await openUPIPayment(amount, group.restaurantName);
+      
+      if (!paid) {
+        setLoading(false);
+        return;
+      }
+
+      // Show manual confirmation because Linking.openURL is one-way
+      Alert.alert(
+        'Payment Confirmation',
+        'Did you successfully complete the payment in the UPI app?',
+        [
+          { 
+            text: 'No', 
+            onPress: () => setLoading(false),
+            style: 'cancel' 
           },
-        },
-      ]);
+          {
+            text: 'Yes, Place Order',
+            onPress: async () => {
+              // 3. Logic for single restaurant checkout after payment
+              const orderItems = group.items.map(item => ({
+                dish_id: item.id,
+                quantity: item.qty
+              }));
+
+              await createMultipleTakeawayOrders([group]);
+              
+              await notifyOrderStatus('CONFIRMED', `order-${Date.now()}`, group.restaurantName);
+
+              Alert.alert('Success', `Order placed for ${group.restaurantName}!`, [
+                {
+                  text: 'View Orders',
+                  onPress: () => {
+                    clearRestaurantItems(group.restaurantId);
+                    if (restaurantGroups.length === 1) {
+                      router.push('/(tabs)/orders' as any);
+                    }
+                  },
+                },
+              ]);
+              setLoading(false);
+            }
+          }
+        ]
+      );
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to place order');
-    } finally {
       setLoading(false);
     }
   };
@@ -123,7 +139,7 @@ export default function CartPage() {
 
   if (restaurantGroups.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
         <View style={styles.header}>
           <Text style={styles.title}>My Cart</Text>
         </View>
@@ -132,7 +148,7 @@ export default function CartPage() {
           <Text style={styles.emptyText}>Your cart is empty</Text>
           <TouchableOpacity
             style={styles.exploreButton}
-            onPress={() => router.push('/(tabs)/explore' as any)}
+            onPress={() => router.push('/(tabs)' as any)}
           >
             <Text style={styles.exploreButtonText}>Explore Restaurants</Text>
           </TouchableOpacity>
@@ -142,7 +158,7 @@ export default function CartPage() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
         <Text style={styles.title}>My Cart</Text>
         <TouchableOpacity onPress={clearCart}>
@@ -234,9 +250,19 @@ export default function CartPage() {
               </View>
             ))}
 
-            <View style={styles.restaurantTotal}>
-              <Text style={styles.totalLabel}>Restaurant Total</Text>
-              <Text style={styles.totalAmount}>₹{getTotalForRestaurant(group).toFixed(2)}</Text>
+            <View style={styles.restaurantFooter}>
+                <View style={styles.restaurantTotal}>
+                  <Text style={styles.totalLabel}>Total</Text>
+                  <Text style={styles.totalAmount}>₹{getTotalForRestaurant(group).toFixed(2)}</Text>
+                </View>
+                
+                <TouchableOpacity
+                    style={[styles.placeOrderBtn, !group.scheduledTime && styles.placeOrderBtnDisabled]}
+                    onPress={() => handlePlaceOrder(group)}
+                    disabled={loading}
+                >
+                    <Text style={styles.placeOrderBtnText}>Place Order</Text>
+                </TouchableOpacity>
             </View>
           </View>
         ))}
@@ -244,18 +270,9 @@ export default function CartPage() {
 
       <View style={styles.footer}>
         <View style={styles.grandTotalRow}>
-          <Text style={styles.grandTotalLabel}>Grand Total</Text>
+          <Text style={styles.grandTotalLabel}>Grand Total ({restaurantGroups.length} Shops)</Text>
           <Text style={styles.grandTotalAmount}>₹{getGrandTotal().toFixed(2)}</Text>
         </View>
-        <TouchableOpacity
-          style={[styles.checkout, loading && styles.checkoutDisabled]}
-          onPress={handleCheckout}
-          disabled={loading}
-        >
-          <Text style={styles.checkoutText}>
-            {loading ? 'Placing Order...' : `Place Orders (${restaurantGroups.length})`}
-          </Text>
-        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -271,6 +288,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 16,
+    paddingTop: 20, // Increased
     borderBottomWidth: 1,
     borderBottomColor: '#F3F3F3',
   },
@@ -309,9 +327,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   restaurantSection: {
-    padding: 16,
-    borderBottomWidth: 8,
-    borderBottomColor: '#F8F9FB',
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 24,
+    padding: 18,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
   },
   restaurantHeader: {
     flexDirection: 'row',
@@ -420,59 +445,61 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#181C2E',
   },
+  restaurantFooter: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F0F5FA',
+    gap: 12,
+  },
   restaurantTotal: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+  },
+  placeOrderBtn: {
+    backgroundColor: '#181C2E',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  placeOrderBtnDisabled: {
+    backgroundColor: '#A0A5BA',
+  },
+  placeOrderBtnText: {
+    color: '#FFF',
+    fontWeight: '800',
+    fontSize: 14,
   },
   totalLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: '#A0A5BA',
   },
   totalAmount: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: '#181C2E',
   },
   footer: {
-    padding: 16,
+    padding: 20,
+    backgroundColor: '#FFF',
     borderTopWidth: 1,
-    borderTopColor: '#F3F3F3',
-    backgroundColor: '#fff',
+    borderTopColor: '#F0F5FA',
   },
   grandTotalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
   },
   grandTotalLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#181C2E',
+    color: '#A0A5BA',
   },
   grandTotalAmount: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
     color: '#FF7A00',
-  },
-  checkout: {
-    backgroundColor: '#181C2E',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  checkoutDisabled: {
-    opacity: 0.6,
-  },
-  checkoutText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 16,
   },
 });

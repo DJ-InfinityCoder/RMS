@@ -88,3 +88,68 @@ export const getCategories = async (): Promise<string[]> => {
 
   return Array.from(categories);
 };
+
+export const getTrendingDishes = async (): Promise<DBMenuItem[]> => {
+  const { data, error } = await supabase
+    .from('dishes')
+    .select('*')
+    .eq('is_available', true)
+    .limit(10);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).map(dish => ({
+    ...dish,
+    image_url: dish.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+  }));
+};
+
+export const getOffers = async (): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('offers')
+    .select(`
+      *,
+      restaurant:restaurants(
+        id,
+        name,
+        address
+      )
+    `)
+    .limit(5);
+
+  if (error) {
+    return [];
+  }
+
+  return data || [];
+};
+
+export const getRestaurantCritics = async (restaurantId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return [];
+  }
+
+  return data || [];
+};
+
+export const getRestaurantOffers = async (restaurantId: string): Promise<any[]> => {
+  const { data, error } = await supabase
+    .from('offers')
+    .select('*')
+    .eq('restaurant_id', restaurantId)
+    .gte('valid_to', new Date().toISOString());
+
+  if (error) {
+    return [];
+  }
+
+  return data || [];
+};

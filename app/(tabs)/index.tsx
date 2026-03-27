@@ -17,9 +17,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import useUserLocation from '@/hooks/useUserLocation';
-import { getRestaurants, DBRestaurant } from '@/api/restaurantApi';
+import { getRestaurants, DBRestaurant, getTrendingDishes, getOffers, DBMenuItem } from '@/api/restaurantApi';
 import { getCurrentUser } from '@/api/authApi';
 import { useCart } from '@/lib/CartContext';
+import Skeleton from '@/components/ui/Skeleton';
 
 const { width } = Dimensions.get('window');
 
@@ -42,6 +43,8 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [userName, setUserName] = useState('Guest');
+  const [trendingDishes, setTrendingDishes] = useState<DBMenuItem[]>([]);
+  const [offers, setOffers] = useState<any[]>([]);
 
   useEffect(() => {
     fetchData();
@@ -52,12 +55,27 @@ export default function HomeScreen() {
     return items.reduce((sum, item) => sum + item.qty, 0);
   }, [items]);
 
+  const [errorStatus, setErrorStatus] = useState<string | null>(null);
+
   const fetchData = async () => {
     try {
-      const data = await getRestaurants();
-      setRestaurants(data);
-    } catch (error) {
-      console.error('Error fetching restaurants:', error);
+      setErrorStatus(null);
+      const [resData, dishesData, offersData] = await Promise.all([
+        getRestaurants(),
+        getTrendingDishes(),
+        getOffers(),
+      ]);
+      
+      setRestaurants(resData);
+      setTrendingDishes(dishesData);
+      setOffers(offersData);
+      
+      if (resData.length === 0) {
+        setErrorStatus('No restaurants found in database.');
+      }
+    } catch (error: any) {
+      console.error('Error fetching data:', error);
+      setErrorStatus(error.message || 'Failed to fetch restaurants');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -89,12 +107,9 @@ export default function HomeScreen() {
   // ─── Category filter ───────────────────────────────────────────────────────
   const filteredRestaurants = useMemo(() => {
     if (!region) return [];
-    const delta = 0.05;
-    const nearby = restaurants.filter(
-      (res) =>
-        Math.abs(res.latitude - region.latitude) < delta &&
-        Math.abs(res.longitude - region.longitude) < delta,
-    );
+    
+    // nearby calculation can be added here if needed
+    const nearby = restaurants;
 
     if (selectedCategory === "All") return nearby;
 
@@ -106,7 +121,7 @@ export default function HomeScreen() {
   const renderCategory = ({ item }: { item: (typeof QUICK_CATEGORIES)[0] }) => (
     <TouchableOpacity
       style={[
-        styles.categoryCard,
+        styles.categoryCard as any,
         selectedCategory === item.name && styles.categoryCardActive,
       ]}
       onPress={() => {
@@ -118,14 +133,19 @@ export default function HomeScreen() {
       }}
       activeOpacity={0.8}
     >
-      <MaterialCommunityIcons
-        name={item.icon as any}
-        size={22}
-        color={selectedCategory === item.name ? "#FFF" : "#FF7A00"}
-      />
+      <View style={[
+          styles.catIconWrap as any,
+          selectedCategory === item.name && styles.catIconWrapActive
+      ]}>
+        <MaterialCommunityIcons
+          name={item.icon as any}
+          size={18}
+          color={selectedCategory === item.name ? "#FFF" : "#FF7A00"}
+        />
+      </View>
       <Text
         style={[
-          styles.categoryText,
+          styles.categoryText as any,
           selectedCategory === item.name && styles.categoryTextActive,
         ]}
       >
@@ -134,70 +154,145 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const renderRestaurant = ({ item }: { item: DBRestaurant & { dishes?: any[] } }) => (
+  const { items: cartItems } = useCart();
+  
+  const getCartCountForRestaurant = (resId: string) => {
+    return cartItems
+      .filter(i => i.restaurantId === resId)
+      .reduce((sum, item) => sum + item.qty, 0);
+  };
+
+  const getCartCountForDish = (dishId: string) => {
+      const item = cartItems.find(i => i.id === dishId);
+      return item ? item.qty : 0;
+  };
+
+  const renderDish = ({ item }: { item: DBMenuItem }) => {
+    const count = getCartCountForDish(item.id);
+    return (
+        <TouchableOpacity 
+            style={styles.dishCard as any}
+            onPress={() => router.push(`/restaurant/${item.restaurant_id}` as any)}
+        >
+            <Image source={{ uri: item.image_url || '' }} style={styles.dishImage as any} />
+            {count > 0 && (
+                <View style={styles.dishBadge as any}>
+                    <Text style={styles.dishBadgeText as any}>{count}</Text>
+                </View>
+            )}
+            <View style={styles.dishInfo as any}>
+                <Text style={styles.dishName as any} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.dishPrice as any}>₹{item.price}</Text>
+            </View>
+        </TouchableOpacity>
+    );
+  };
+
+  const renderRestaurant = ({ item }: { item: DBRestaurant & { dishes?: any[] } }) => {
+    const resCartCount = getCartCountForRestaurant(item.id);
+    return (
     <TouchableOpacity
-      style={styles.restaurantCard}
+      style={styles.restaurantCard as any}
       onPress={() => router.push(`/restaurant/${item.id}` as any)}
       activeOpacity={0.85}
     >
-      <Image source={{ uri: item.image_url || '' }} style={styles.resImage} />
-      <View style={styles.resInfo}>
-        <Text style={styles.resName}>{item.name}</Text>
-        <Text style={styles.resCuisine}>{item.cuisine.join(" • ")}</Text>
-        <View style={styles.resMetaRow}>
-          <View style={styles.resMetaItem}>
+      <Image source={{ uri: item.image_url || '' }} style={styles.resImage as any} />
+      {resCartCount > 0 && (
+          <View style={styles.resCartBadge as any}>
+              <Ionicons name="cart" size={12} color="#FFF" />
+              <Text style={styles.resCartBadgeText as any}>{resCartCount}</Text>
+          </View>
+      )}
+      <View style={styles.resInfo as any}>
+        <Text style={styles.resName as any}>{item.name}</Text>
+        <Text style={styles.resCuisine as any}>{item.cuisine.join(" • ")}</Text>
+        <View style={styles.resMetaRow as any}>
+          <View style={styles.resMetaItem as any}>
             <Ionicons name="star" size={14} color="#FF7A00" />
-            <Text style={styles.resMetaText}>{item.rating}</Text>
+            <Text style={styles.resMetaText as any}>{item.rating}</Text>
           </View>
-          <View style={styles.resMetaDot} />
-          <View style={styles.resMetaItem}>
+          <View style={styles.resMetaDot as any} />
+          <View style={styles.resMetaItem as any}>
             <Ionicons name="time-outline" size={14} color="#A0A5BA" />
-            <Text style={styles.resMetaText}>{item.deliveryTime}</Text>
+            <Text style={styles.resMetaText as any}>{item.deliveryTime}</Text>
           </View>
-          <View style={styles.resMetaDot} />
-          <View style={styles.resMetaItem}>
+          <View style={styles.resMetaDot as any} />
+          <View style={styles.resMetaItem as any}>
             <Ionicons name="restaurant-outline" size={14} color="#A0A5BA" />
-            <Text style={styles.resMetaText}>{item.dishes?.length || 0} items</Text>
+            <Text style={styles.resMetaText as any}>{item.dishes?.length || 0} items</Text>
           </View>
         </View>
       </View>
     </TouchableOpacity>
   );
+};
 
-  if (!region) {
+  if (!region || loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF7A00" />
-        <Text style={styles.loadingText}>Finding restaurants near you...</Text>
-      </View>
+      <SafeAreaView style={styles.container as any}>
+        <View style={styles.headerRow as any}>
+          <View>
+             <Skeleton width={120} height={18} style={{ marginBottom: 8 }} />
+             <Skeleton width={180} height={24} />
+          </View>
+          <Skeleton width={40} height={40} borderRadius={20} />
+        </View>
+
+        <ScrollView showsVerticalScrollIndicator={false} style={{ paddingHorizontal: 20 }}>
+          <Skeleton width="100%" height={160} borderRadius={24} style={{ marginTop: 20 }} />
+          
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 30, marginBottom: 15 }}>
+            <Skeleton width={100} height={20} />
+            <Skeleton width={60} height={20} />
+          </View>
+          
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} width={80} height={40} borderRadius={20} style={{ marginRight: 10 }} />
+            ))}
+          </ScrollView>
+
+          <View style={{ height: 20 }} />
+          {[1, 2, 3].map((i) => (
+            <View key={i} style={{ marginBottom: 20 }}>
+              <Skeleton width="100%" height={150} borderRadius={16} />
+              <Skeleton width="60%" height={18} style={{ marginTop: 12 }} />
+              <Skeleton width="40%" height={14} style={{ marginTop: 6 }} />
+            </View>
+          ))}
+        </ScrollView>
+      </SafeAreaView>
     );
   }
 
-  const delta = 0.05;
-
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+    <SafeAreaView style={styles.container as any}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF7A00']} />
+        }
+      >
         {/* ─── Clean Minimal Header ──────────────────────────────────────── */}
-        <View style={styles.headerRow}>
+        <View style={styles.headerRow as any}>
           <View>
-            <Text style={styles.greetingSmall}>Hey {userName},</Text>
-            <Text style={styles.greetingBold}>{greeting}! 👋</Text>
+            <Text style={styles.greetingSmall as any}>Hey {userName},</Text>
+            <Text style={styles.greetingBold as any}>{greeting}! 👋</Text>
           </View>
-          <View style={styles.headerActions}>
+          <View style={styles.headerActions as any}>
             <TouchableOpacity
-              style={styles.notifBtn}
-              onPress={() => router.push('/cart' as any)}
+              style={[styles.notifBtn as any, { marginLeft: 10, marginTop: 10 }]}
+              onPress={() => router.push('/(tabs)/cart' as any)}
             >
               <Ionicons name="cart-outline" size={22} color="#181C2E" />
               {cartItemCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{cartItemCount}</Text>
+                <View style={styles.badge as any}>
+                  <Text style={styles.badgeText as any}>{cartItemCount}</Text>
                 </View>
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.notifBtn, { marginLeft: 10 }]}
+              style={[styles.notifBtn as any, { marginLeft: 10, marginTop: 10 }]}
               onPress={() => router.push('/settings' as any)}
             >
               <Ionicons name="settings-outline" size={22} color="#181C2E" />
@@ -207,59 +302,110 @@ export default function HomeScreen() {
 
         {/* ─── Search Bar ────────────────────────────────────────────────── */}
         <TouchableOpacity
-          style={styles.searchBar}
+          style={styles.searchBar as any}
           onPress={() => router.push("/search" as any)}
           activeOpacity={0.8}
         >
-          <Ionicons name="search-outline" size={20} color="#A0A5BA" />
-          <Text style={styles.searchPlaceholder}>
-            Search dishes, restaurants, cuisines...
-          </Text>
+          <View style={styles.searchInner as any}>
+              <Ionicons name="search-outline" size={20} color="#FF7A00" />
+              <Text style={styles.searchPlaceholder as any}>
+                Search dishes, restaurants...
+              </Text>
+          </View>
+          <View style={styles.filterBtn as any}>
+              <Ionicons name="options-outline" size={20} color="#FFF" />
+          </View>
         </TouchableOpacity>
 
+        {/* ─── Special Offers Banner ─────────────────────────────────────── */}
+        {offers.length > 0 && (
+            <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.offersContainer as any}
+                snapToInterval={width - 40}
+                decelerationRate="fast"
+            >
+                {offers.map((offer, idx) => (
+                    <TouchableOpacity 
+                        key={idx} 
+                        style={[styles.offerCard as any, { backgroundColor: idx % 2 === 0 ? '#321D0B' : '#FF7A00' }]}
+                        onPress={() => router.push(`/restaurant/${offer.restaurant?.id}` as any)}
+                    >
+                        <View style={styles.offerContent as any}>
+                            <Text style={styles.offerTag as any}>SPECIAL OFFER</Text>
+                            <Text style={styles.offerTitle as any}>{offer.title || `${offer.discount_percent}% Flat Discount`}</Text>
+                            <Text style={styles.offerDesc as any}>{offer.description || 'On all orders above ₹499'}</Text>
+                            
+                            <View style={styles.offerResWrap as any}>
+                                <Ionicons name="restaurant" size={12} color="rgba(255,255,255,0.7)" />
+                                <Text style={styles.offerResText as any}>{offer.restaurant?.name} • {offer.restaurant?.address?.split(',')[0]}</Text>
+                            </View>
+                        </View>
+                        <Image 
+                            source={{ uri: 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400' }} 
+                            style={styles.offerImage as any} 
+                        />
+                    </TouchableOpacity>
+                ))}
+            </ScrollView>
+        )}
+
         {/* ─── Scan Buttons ──────────────────────────────────────────────── */}
-        <View style={styles.scanRow}>
+        <View style={styles.scanRow as any}>
           <TouchableOpacity
-            style={styles.scanButton}
+            style={styles.scanButton as any}
             onPress={() => router.push("/scanner?mode=qr" as any)}
             activeOpacity={0.85}
           >
-            <View style={styles.scanIconWrap}>
-              <Ionicons name="qr-code-outline" size={24} color="#FFF" />
+            <View style={styles.scanIconWrap as any}>
+              <Ionicons name="qr-code-outline" size={20} color="#FFF" />
             </View>
             <View>
-              <Text style={styles.scanTitle}>Scan QR</Text>
-              <Text style={styles.scanSub}>Restaurant code</Text>
+              <Text style={styles.scanTitle as any}>Scan QR</Text>
+              <Text style={styles.scanSub as any}>Quick Menu</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.scanButton, styles.scanButtonAlt]}
+            style={[styles.scanButton as any, styles.scanButtonAlt as any]}
             onPress={() => router.push("/snap-menu" as any)}
             activeOpacity={0.85}
           >
-            <View style={styles.scanIconWrapAlt}>
+            <View style={styles.scanIconWrapAlt as any}>
               <MaterialCommunityIcons
                 name="text-recognition"
-                size={24}
+                size={20}
                 color="#FFF"
               />
             </View>
             <View>
-              <Text style={styles.scanTitle}>Scan Menu</Text>
-              <Text style={styles.scanSub}>OCR capture</Text>
+              <Text style={styles.scanTitle as any}>Snap Menu</Text>
+              <Text style={styles.scanSub as any}>AI OCR Scan</Text>
             </View>
           </TouchableOpacity>
         </View>
 
+        {/* ─── Trending Dishes ───────────────────────────────────────────── */}
+        {trendingDishes.length > 0 && selectedCategory === "All" && (
+            <View style={styles.trendingSection as any}>
+                <View style={styles.sectionHeader as any}>
+                    <Text style={styles.sectionTitle as any}>Popular Dishes</Text>
+                </View>
+                <FlatList
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    data={trendingDishes}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderDish}
+                    contentContainerStyle={styles.trendingList as any}
+                />
+            </View>
+        )}
+
         {/* ─── Categories ────────────────────────────────────────────────── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Categories</Text>
-          <TouchableOpacity onPress={() => setSelectedCategory("All")}>
-            <Text style={styles.seeAll}>
-              {selectedCategory !== "All" ? "Clear Filter" : "See All >"}
-            </Text>
-          </TouchableOpacity>
+        <View style={styles.sectionHeader as any}>
+          <Text style={styles.sectionTitle as any}>Categories</Text>
         </View>
 
         <FlatList
@@ -268,17 +414,17 @@ export default function HomeScreen() {
           data={QUICK_CATEGORIES}
           keyExtractor={(item) => item.id}
           renderItem={renderCategory}
-          contentContainerStyle={styles.categoryList}
+          contentContainerStyle={styles.categoryList as any}
         />
 
         {/* ─── Restaurants ───────────────────────────────────────────────── */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
+        <View style={styles.sectionHeader as any}>
+          <Text style={styles.sectionTitle as any}>
             {selectedCategory === "All"
               ? "Open Restaurants"
               : `"${selectedCategory}" Restaurants`}
           </Text>
-          <Text style={styles.countBadge}>{filteredRestaurants.length}</Text>
+          <Text style={styles.countBadge as any}>{filteredRestaurants.length}</Text>
         </View>
 
         <FlatList
@@ -286,20 +432,27 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderRestaurant}
           scrollEnabled={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 100, marginTop: 16 }}
           ListEmptyComponent={
-            <View style={styles.emptyState}>
+            <View style={styles.emptyState as any}>
               <MaterialCommunityIcons
-                name="store-off-outline"
+                name={errorStatus ? "alert-circle-outline" : "store-off-outline"}
                 size={48}
-                color="#D0D5DD"
+                color={errorStatus ? "#EF4444" : "#D0D5DD"}
               />
-              <Text style={styles.emptyTitle}>No restaurants found</Text>
-              <Text style={styles.emptySubtitle}>
-                {selectedCategory !== "All"
-                  ? `No restaurants serve "${selectedCategory}" near you`
-                  : "No restaurants nearby"}
+              <Text style={styles.emptyTitle as any}>
+                {errorStatus ? "Data Fetching Error" : "No restaurants found"}
               </Text>
+              <Text style={styles.emptySubtitle as any}>
+                {errorStatus || (selectedCategory !== "All"
+                  ? `No restaurants serve "${selectedCategory}" near you`
+                  : "No restaurants nearby")}
+              </Text>
+              {errorStatus && (
+                <TouchableOpacity style={styles.retryBtn as any} onPress={fetchData}>
+                  <Text style={styles.retryBtnText as any}>Retry Fetch</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
         />
@@ -383,104 +536,252 @@ const styles = StyleSheet.create({
   // ── Search ──
   searchBar: {
     flexDirection: "row",
-    backgroundColor: "#F0F5FA",
-    borderRadius: 16,
-    padding: 16,
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    padding: 6,
+    paddingLeft: 16,
     marginTop: 18,
     alignItems: "center",
+    justifyContent: 'space-between',
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F0F5FA',
+  },
+  searchInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   searchPlaceholder: {
-    marginLeft: 10,
-    color: "#A0A5BA",
+    color: "#6B7280",
     fontSize: 14,
     fontWeight: "500",
+  },
+  filterBtn: {
+    backgroundColor: '#FF7A00',
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // ── Offers ──
+  offersContainer: {
+    paddingVertical: 20,
+    gap: 15,
+  },
+  offerCard: {
+    width: width - 70,
+    height: 150,
+    borderRadius: 24,
+    padding: 20,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    marginRight: 10,
+  },
+  offerContent: {
+    flex: 1,
+    zIndex: 2,
+  },
+  offerTag: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  offerTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginTop: 4,
+  },
+  offerDesc: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  offerBtn: {
+    backgroundColor: '#FFF',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    marginTop: 14,
+  },
+  offerBtnText: {
+    color: '#181C2E',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  offerImage: {
+    position: 'absolute',
+    right: -20,
+    bottom: -20,
+    width: 140,
+    height: 140,
+    opacity: 0.6,
+    borderRadius: 70,
+  },
+  offerResWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 8,
+      gap: 6,
+  },
+  offerResText: {
+      color: 'rgba(255,255,255,0.7)',
+      fontSize: 11,
+      fontWeight: '600',
   },
 
   // ── Scan Buttons ──
   scanRow: {
     flexDirection: "row",
-    marginTop: 20,
+    marginTop: 10,
     gap: 12,
+    marginBottom: 10,
   },
   scanButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFF",
-    borderRadius: 18,
-    padding: 16,
+    borderRadius: 20,
+    padding: 14,
     gap: 12,
-    elevation: 4,
+    elevation: 3,
     shadowColor: "#FF7A00",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     borderWidth: 1,
-    borderColor: "#FFF4E5",
+    borderColor: "#F0F5FA",
   },
   scanButtonAlt: {
     shadowColor: "#181C2E",
-    borderColor: "#F0F5FA",
   },
   scanIconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: "#FF7A00",
     alignItems: "center",
     justifyContent: "center",
   },
   scanIconWrapAlt: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: "#181C2E",
     alignItems: "center",
     justifyContent: "center",
   },
   scanTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "700",
     color: "#181C2E",
   },
   scanSub: {
-    fontSize: 11,
+    fontSize: 10,
     color: "#A0A5BA",
     marginTop: 2,
     fontWeight: "500",
+  },
+
+  // ── Trending ──
+  trendingSection: {
+    marginTop: 10,
+  },
+  trendingList: {
+    paddingVertical: 15,
+  },
+  dishCard: {
+    width: 140,
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    marginRight: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  dishImage: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#F0F5FA',
+  },
+  dishBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#FF7A00',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFF',
+  },
+  dishBadgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  dishInfo: {
+    padding: 10,
+  },
+  dishName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#181C2E',
+  },
+  dishPrice: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF7A00',
+    marginTop: 2,
   },
 
   // ── Section ──
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 26,
+    marginTop: 20,
     alignItems: "center",
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "700",
+    fontWeight: "800",
     color: "#181C2E",
   },
   seeAll: {
     color: "#FF7A00",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: 13,
   },
   countBadge: {
     backgroundColor: "#FF7A00",
     color: "#FFF",
-    fontWeight: "700",
+    fontWeight: "800",
     fontSize: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
     borderRadius: 12,
     overflow: "hidden",
   },
 
   // ── Categories ──
   categoryList: {
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   categoryCard: {
     flexDirection: "row",
@@ -489,11 +790,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 30,
-    marginRight: 10,
+    marginRight: 12,
     elevation: 3,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     borderWidth: 1,
     borderColor: "#F0F5FA",
@@ -503,11 +804,24 @@ const styles = StyleSheet.create({
     borderColor: "#FF7A00",
     elevation: 5,
     shadowColor: "#FF7A00",
-    shadowOpacity: 0.25,
+    shadowOpacity: 0.3,
+  },
+  catIconWrap: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: '#FFF4E5',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: -4,
+      marginLeft: -4,
+  },
+  catIconWrapActive: {
+      backgroundColor: 'rgba(255,255,255,0.2)',
   },
   categoryText: {
-    marginLeft: 8,
-    fontWeight: "600",
+    marginLeft: 10,
+    fontWeight: "700",
     fontSize: 13,
     color: "#181C2E",
   },
@@ -518,34 +832,55 @@ const styles = StyleSheet.create({
   // ── Restaurant Cards ──
   restaurantCard: {
     backgroundColor: "#FFF",
-    borderRadius: 22,
+    borderRadius: 24,
     overflow: "hidden",
-    marginBottom: 18,
+    marginBottom: 20,
     elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    position: 'relative',
+  },
+  resCartBadge: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      backgroundColor: '#FF7A00',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 12,
+      zIndex: 5,
+      borderWidth: 1.5,
+      borderColor: '#FFF',
+  },
+  resCartBadgeText: {
+      color: '#FFF',
+      fontSize: 12,
+      fontWeight: '800',
   },
   resImage: {
     width: "100%",
-    height: 160,
+    height: 180,
     backgroundColor: "#F0F5FA",
   },
   resInfo: {
-    padding: 16,
+    padding: 18,
   },
   resName: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 19,
+    fontWeight: "800",
     color: "#181C2E",
     marginBottom: 4,
   },
   resCuisine: {
-    fontSize: 12,
-    color: "#A0A5BA",
+    fontSize: 13,
+    color: "#6B7280",
     fontWeight: "500",
-    marginBottom: 10,
+    marginBottom: 12,
   },
   resMetaRow: {
     flexDirection: "row",
@@ -561,19 +896,19 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: "#D0D5DD",
-    marginHorizontal: 8,
+    marginHorizontal: 10,
   },
   resMetaText: {
     fontSize: 13,
-    color: "#6B7280",
-    fontWeight: "500",
+    color: "#181C2E",
+    fontWeight: "600",
   },
 
   // ── Map ──
   mapContainer: {
     height: 200,
     marginVertical: 15,
-    borderRadius: 18,
+    borderRadius: 22,
     overflow: "hidden",
     elevation: 3,
     shadowColor: "#000",
@@ -585,19 +920,31 @@ const styles = StyleSheet.create({
   // ── Empty ──
   emptyState: {
     alignItems: "center",
-    paddingTop: 50,
-    paddingBottom: 30,
+    paddingTop: 40,
+    paddingBottom: 40,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 17,
+    fontWeight: "800",
     color: "#181C2E",
-    marginTop: 12,
+    marginTop: 14,
   },
   emptySubtitle: {
-    fontSize: 13,
-    color: "#A0A5BA",
-    marginTop: 4,
+    fontSize: 14,
+    color: "#6B7280",
+    marginTop: 6,
     textAlign: "center",
+  },
+  retryBtn: {
+    marginTop: 20,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: "#FF7A00",
+    borderRadius: 14,
+  },
+  retryBtnText: {
+    color: "#FFF",
+    fontWeight: "800",
+    fontSize: 15,
   },
 });

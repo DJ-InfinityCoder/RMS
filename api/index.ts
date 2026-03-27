@@ -7,3 +7,4 @@ export * from './ocrApi';
 export * from './pipelineApi';
 export * from './restaurantApi';
 export * from './searchApi';
+export * from './vendorApi';

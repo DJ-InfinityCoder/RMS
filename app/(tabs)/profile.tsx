@@ -8,6 +8,7 @@ import {
     Image,
     Switch,
     Alert,
+    Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useUser } from '@/lib/UserContext';
 import { logout as authLogout } from '@/api/authApi';
 import { getUserOrdersCount } from '@/api/userApi';
+import { requestNotificationPermissions } from '@/utils/notifications';
 
 // ─── Section Row ─────────────────────────────────────────────────────────────
 
@@ -120,23 +122,33 @@ export default function Profile() {
                 {/* Avatar Card */}
                 <View style={styles.avatarCard}>
                     <View style={styles.avatarWrapper}>
-                        <Image source={{ uri: profile.avatar }} style={styles.avatar} />
-                        <TouchableOpacity style={styles.avatarEdit}>
-                            <Ionicons name="camera" size={14} color="#FFF" />
+                        {profile.avatar ? (
+                            <Image source={{ uri: profile.avatar }} style={styles.avatar} />
+                        ) : (
+                            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                                <Text style={styles.avatarInitial}>
+                                    {profile.name ? profile.name.charAt(0).toUpperCase() : 'U'}
+                                </Text>
+                            </View>
+                        )}
+                        <TouchableOpacity 
+                            style={styles.avatarEdit}
+                            onPress={() => router.push('/edit-profile' as any)}
+                        >
+                            <MaterialCommunityIcons name="pencil" size={14} color="#FFF" />
                         </TouchableOpacity>
                     </View>
                     <Text style={styles.userName}>{profile.name}</Text>
                     <Text style={styles.userEmail}>{profile.email}</Text>
                     <Text style={styles.memberSince}>Member since {profile.memberSince}</Text>
 
-                    {/* Edit Profile Button */}
+                    {/* Edit Profile Icon (Top Right of Card) */}
                     <TouchableOpacity
-                        style={styles.editProfileBtn}
+                        style={styles.editProfileIconBtn}
                         onPress={() => router.push('/edit-profile' as any)}
                         activeOpacity={0.8}
                     >
-                        <Ionicons name="create-outline" size={16} color="#FFF" />
-                        <Text style={styles.editProfileText}>Edit Profile</Text>
+                        <MaterialCommunityIcons name="pencil" size={20} color="#FF7A00" />
                     </TouchableOpacity>
 
                     {/* Loyalty Tag */}
@@ -299,23 +311,23 @@ export default function Profile() {
                         iconBg="#EFF6FF"
                         iconColor="#3B82F6"
                         label="Help & FAQ"
-                        onPress={() => { }}
-                    />
-                    <View style={styles.separator} />
-                    <ProfileRow
-                        icon="chatbubble-ellipses-outline"
-                        iconBg="#F0FDF4"
-                        iconColor="#16A34A"
-                        label="Chat Support"
-                        onPress={() => { }}
+                        onPress={() => router.push('/help' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
                         icon="document-text-outline"
+                        iconBg="#F0FDF4"
+                        iconColor="#16A34A"
+                        label="Terms & Conditions"
+                        onPress={() => router.push('/terms' as any)}
+                    />
+                    <View style={styles.separator} />
+                    <ProfileRow
+                        icon="shield-checkmark-outline"
                         iconBg="#F8F9FA"
                         iconColor="#6B7280"
-                        label="Terms & Privacy Policy"
-                        onPress={() => { }}
+                        label="Privacy Policy"
+                        onPress={() => router.push('/privacy' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -323,7 +335,9 @@ export default function Profile() {
                         iconBg="#FFFBEB"
                         iconColor="#F59E0B"
                         label="Rate the App"
-                        onPress={() => { }}
+                        onPress={() => {
+                            Linking.openURL('https://play.google.com/store').catch(() => {});
+                        }}
                     />
                 </View>
 
@@ -385,6 +399,17 @@ const styles = StyleSheet.create({
         borderWidth: 3,
         borderColor: '#FF7A00',
     },
+    avatarPlaceholder: {
+        backgroundColor: '#FFF4E5',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderColor: '#F0F5FA',
+    },
+    avatarInitial: {
+        fontSize: 36,
+        fontWeight: '900',
+        color: '#FF7A00',
+    },
     avatarEdit: {
         position: 'absolute',
         bottom: 0,
@@ -401,17 +426,14 @@ const styles = StyleSheet.create({
     userName: { fontSize: 22, fontWeight: '700', color: '#181C2E' },
     userEmail: { fontSize: 13, color: '#A0A5BA', marginTop: 4, marginBottom: 6 },
     memberSince: { fontSize: 12, color: '#A0A5BA' },
-    editProfileBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#FF7A00',
+    editProfileIconBtn: {
+        position: 'absolute',
+        top: 20,
+        right: 20,
+        padding: 8,
+        backgroundColor: '#FFF4E5',
         borderRadius: 12,
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        marginTop: 14,
-        gap: 6,
     },
-    editProfileText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
     loyaltyBadge: {
         flexDirection: 'row',
         alignItems: 'center',
