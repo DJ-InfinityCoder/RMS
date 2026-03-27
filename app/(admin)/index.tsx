@@ -131,9 +131,11 @@ export default function DashboardScreen() {
 
     const quickActions = [
         { icon: 'add-circle', label: 'Add Dish', bg: C.primary, onPress: () => restaurantId && setIsFormVisible(true) },
-        { icon: 'person-circle', label: 'Profile', bg: C.darkNavy, onPress: () => router.push('/(admin)/profile') },
+        { icon: 'pricetag', label: 'Offers', bg: '#43A047', onPress: () => router.push('/(admin)/offers') },
+        { icon: 'calendar', label: 'Tables', bg: '#2196F3', onPress: () => router.push('/(admin)/tables') },
+        { icon: 'star', label: 'Reviews', bg: '#FF9800', onPress: () => router.push('/(admin)/reviews') },
         { icon: 'qr-code', label: 'QR Code', bg: '#E65100', onPress: () => setIsQRVisible(true) },
-        { icon: 'log-out', label: 'Logout', bg: '#455A64', onPress: () => router.replace('/login') },
+        { icon: 'person-circle', label: 'Profile', bg: C.darkNavy, onPress: () => router.push('/(admin)/profile') },
     ];
 
     return (

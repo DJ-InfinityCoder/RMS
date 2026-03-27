@@ -41,7 +41,8 @@ export async function POST(req: Request, props: any) {
             price, 
             recommended_for, 
             image_url, 
-            is_available 
+            is_available,
+            ingredients 
         } = body;
 
         if (!name || price === undefined) {
@@ -59,6 +60,11 @@ export async function POST(req: Request, props: any) {
                 recommended_for,
                 image_url,
                 is_available: is_available ?? true,
+                ingredients: {
+                    create: ingredients?.map((ingredientId: string) => ({
+                        ingredient_id: ingredientId,
+                    })) || [],
+                },
             },
         });
 

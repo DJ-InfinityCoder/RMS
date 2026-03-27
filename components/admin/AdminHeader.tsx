@@ -167,11 +167,16 @@ const styles = StyleSheet.create({
         backgroundColor: C.white,
         borderRadius: 16,
         padding: 16,
-        elevation: 10,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 10,
+        ...Platform.select({
+            web: { boxShadow: '0 4px 10px rgba(0,0,0,0.2)' },
+            default: {
+                elevation: 10,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.2,
+                shadowRadius: 10,
+            },
+        }),
     },
     notifHeader: {
         flexDirection: 'row',

@@ -25,6 +25,27 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
     });
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [allIngredients, setAllIngredients] = useState<any[]>([]);
+    const [selectedIngredients, setSelectedIngredients] = useState<string[]>([]);
+
+    React.useEffect(() => {
+        const fetchIngredients = async () => {
+            try {
+                const res = await fetch('/api/ingredients');
+                const data = await res.json();
+                setAllIngredients(data);
+            } catch (e) {
+                console.error('Fetch ingredients error:', e);
+            }
+        };
+        fetchIngredients();
+    }, []);
+
+    const toggleIngredient = (id: string) => {
+        setSelectedIngredients(prev => 
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
 
     const validate = () => {
         const newErrors: Record<string, string> = {};
@@ -48,7 +69,7 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify({ ...formData, ingredients: selectedIngredients }),
             });
 
             if (!response.ok) {
@@ -149,6 +170,24 @@ export const AddDishForm: React.FC<AddDishFormProps> = ({ restaurantId, onSucces
                     placeholder="https://example.com/dish.jpg"
                 />
 
+                <Text style={styles.inputLabel}>Ingredients</Text>
+                <View style={styles.ingredientsGrid}>
+                    {allIngredients.map((ing) => {
+                        const isSelected = selectedIngredients.includes(ing.id);
+                        return (
+                            <TouchableOpacity
+                                key={ing.id}
+                                style={[styles.ingredientChip, isSelected && styles.ingredientChipActive]}
+                                onPress={() => toggleIngredient(ing.id)}
+                            >
+                                <Text style={[styles.ingredientText, isSelected && styles.ingredientTextActive]}>
+                                    {ing.name}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
+
                 <View style={styles.switchRow}>
                     <Text style={styles.switchLabel}>Available in Menu</Text>
                     <Switch
@@ -227,5 +266,40 @@ const styles = StyleSheet.create({
         right: 15,
         top: 15,
         padding: 4,
+    },
+    inputLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: AuthTheme.colors.darkNavy,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    ingredientsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginBottom: 20,
+    },
+    ingredientChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        backgroundColor: '#F0F2F5',
+        borderWidth: 1,
+        borderColor: '#E0E6ED',
+    },
+    ingredientChipActive: {
+        backgroundColor: AuthTheme.colors.primary,
+        borderColor: AuthTheme.colors.primary,
+    },
+    ingredientText: {
+        fontSize: 13,
+        color: AuthTheme.colors.darkNavy,
+        fontWeight: '500',
+    },
+    ingredientTextActive: {
+        color: AuthTheme.colors.white,
+        fontWeight: '700',
     },
 });
