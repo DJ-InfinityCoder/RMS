@@ -8,7 +8,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "seed": "npx prisma db seed"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -50,5 +51,8 @@
     "prisma": "6.19.2",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "private": true,
+  "prisma": {
+    "seed": "npx ts-node prisma/seed.ts"
+  }
 }

@@ -1,11 +1,13 @@
 import { prisma } from '@/lib/prisma';
 
-export async function GET(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function GET(req: Request, props: any) {
     try {
-        const { id } = params;
+        const id = props.id || props.params?.id;
+        
+        if (!id) {
+            return Response.json({ error: 'Missing ID' }, { status: 400 });
+        }
+
         const orders = await prisma.order.findMany({
             where: { restaurant_id: id },
             include: {
@@ -23,18 +25,29 @@ export async function GET(
             },
             orderBy: { created_at: 'desc' },
         });
-        return Response.json(orders);
-    } catch (error) {
+
+        const serializedOrders = orders.map((order: any) => ({
+            ...order,
+            created_at: order.created_at.toISOString(),
+            order_items: order.order_items.map((item: any) => ({
+                ...item,
+                dish: item.dish ? {
+                    ...item.dish,
+                    price: item.dish.price ? Number(item.dish.price) : 0,
+                } : null
+            }))
+        }));
+
+        return Response.json(serializedOrders);
+    } catch (error: any) {
         console.error('Fetch orders error:', error);
-        return Response.json({ error: 'Internal Server Error' }, { status: 500 });
+        return Response.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }
 }
 
-export async function PATCH(
-    req: Request,
-    { params }: { params: { id: string } }
-) {
+export async function PATCH(req: Request, props: any) {
     try {
+        const id = props.id || props.params?.id;
         const body = await req.json();
         const { orderId, status } = body;
 
@@ -48,8 +61,8 @@ export async function PATCH(
         });
 
         return Response.json(updatedOrder);
-    } catch (error) {
+    } catch (error: any) {
         console.error('Update order error:', error);
-        return Response.json({ error: 'Internal Server Error' }, { status: 500 });
+        return Response.json({ error: error.message || 'Internal Server Error' }, { status: 500 });
     }
 }
