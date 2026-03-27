@@ -33,6 +33,8 @@ export default function RootLayout() {
               <Stack.Screen name="restaurant/[id]" options={{ headerShown: false }} />
               <Stack.Screen name="search" options={{ headerShown: false }} />
               <Stack.Screen name="scanner" options={{ headerShown: false }} />
+              <Stack.Screen name="snap-menu" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="menu-result" options={{ headerShown: false, animation: 'slide_from_right' }} />
               <Stack.Screen name="settings" options={{ headerShown: false }} />
               <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
               <Stack.Screen name="map-directions" options={{ headerShown: false }} />
