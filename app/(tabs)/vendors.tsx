@@ -3,13 +3,13 @@ import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     ScrollView,
     TouchableOpacity,
     Image,
     FlatList,
     TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -21,7 +21,7 @@ interface Vendor {
     distance: string;
     rating: number;
     isOpen: boolean;
-    price: string; // avg price
+    price: string;
     image: string;
     tags: string[];
 }
@@ -159,16 +159,13 @@ export default function StreetVendors() {
     );
 
     return (
-        <SafeAreaView style={styles.container}>
-            {/* Header */}
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+            {/* Header — Map icon REMOVED per requirement */}
             <View style={styles.header}>
                 <View>
                     <Text style={styles.headerTitle}>Street Vendors</Text>
                     <Text style={styles.headerSub}>Discover local food gems 🛒</Text>
                 </View>
-                <TouchableOpacity style={styles.mapBtn}>
-                    <Ionicons name="map-outline" size={22} color="#FF7A00" />
-                </TouchableOpacity>
             </View>
 
             {/* Search */}
@@ -231,14 +228,6 @@ const styles = StyleSheet.create({
     },
     headerTitle: { fontSize: 24, fontWeight: '700', color: '#181C2E' },
     headerSub: { fontSize: 13, color: '#A0A5BA', marginTop: 2 },
-    mapBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#FFF4E5',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
     searchBar: {
         flexDirection: 'row',
         alignItems: 'center',

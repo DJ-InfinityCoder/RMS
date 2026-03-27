@@ -1,104 +1,66 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     View,
     Text,
     StyleSheet,
-    SafeAreaView,
     FlatList,
     TouchableOpacity,
     Image,
+    Linking,
+    Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-type OrderStatus = 'delivered' | 'on_the_way' | 'preparing' | 'cancelled';
-
-interface OrderItem {
-    id: string;
-    restaurantName: string;
-    restaurantImage: string;
-    items: string[];
-    total: string;
-    status: OrderStatus;
-    date: string;
-    orderId: string;
-    eta?: string;
-}
-
-// ─── Mock Data ───────────────────────────────────────────────────────────────
-
-const ORDERS: OrderItem[] = [
-    {
-        id: '1',
-        restaurantName: 'Rose Garden Restaurant',
-        restaurantImage: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=300&q=70',
-        items: ['Veg Biryani', 'Raita', 'Gulab Jamun'],
-        total: '₹450',
-        status: 'on_the_way',
-        date: 'Today, 10:45 AM',
-        orderId: '#RMS20260001',
-        eta: '15 min',
-    },
-    {
-        id: '2',
-        restaurantName: 'American Spicy Burger',
-        restaurantImage: 'https://images.unsplash.com/photo-1550547660-d9450f859349?w=300&q=70',
-        items: ['Double Smash Burger', 'Loaded Fries', 'Cola'],
-        total: '₹380',
-        status: 'preparing',
-        date: 'Today, 10:20 AM',
-        orderId: '#RMS20260002',
-        eta: '25 min',
-    },
-    {
-        id: '3',
-        restaurantName: 'Pizza Palace',
-        restaurantImage: 'https://images.unsplash.com/photo-1548365328-9f547fb09594?w=300&q=70',
-        items: ['Pepperoni Pizza (L)', 'Garlic Bread'],
-        total: '₹620',
-        status: 'delivered',
-        date: 'Yesterday, 8:30 PM',
-        orderId: '#RMS20260003',
-    },
-    {
-        id: '4',
-        restaurantName: 'Rose Garden Restaurant',
-        restaurantImage: 'https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=300&q=70',
-        items: ['Dal Makhani', 'Butter Naan x2', 'Kulfi'],
-        total: '₹320',
-        status: 'cancelled',
-        date: '2 days ago',
-        orderId: '#RMS20260004',
-    },
-];
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const STATUS_CONFIG: Record<OrderStatus, { label: string; color: string; bg: string; icon: keyof typeof Ionicons.glyphMap }> = {
-    on_the_way: { label: 'On the Way', color: '#3B82F6', bg: '#EFF6FF', icon: 'bicycle-outline' },
-    preparing: { label: 'Preparing', color: '#F59E0B', bg: '#FFFBEB', icon: 'restaurant-outline' },
-    delivered: { label: 'Delivered', color: '#22C55E', bg: '#F0FDF4', icon: 'checkmark-circle-outline' },
-    cancelled: { label: 'Cancelled', color: '#EF4444', bg: '#FEF2F2', icon: 'close-circle-outline' },
-};
+import { useOrders, ORDER_STATUS_CONFIG, OrderStatus, Order } from '@/lib/OrderContext';
+import { sendOrderStatusNotification } from '@/services/notificationService';
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Orders() {
+    const { orders, updateOrderStatus, sortOrdersByTime } = useOrders();
     const [tab, setTab] = useState<'active' | 'past'>('active');
+    const [sortLatest, setSortLatest] = useState(true);
 
-    const activeOrders = ORDERS.filter(
-        (o) => o.status === 'on_the_way' || o.status === 'preparing'
-    );
-    const pastOrders = ORDERS.filter(
-        (o) => o.status === 'delivered' || o.status === 'cancelled'
-    );
-    const displayOrders = tab === 'active' ? activeOrders : pastOrders;
+    // ─── Filtered + Sorted Orders ────────────────────────────────────────────
+    const displayOrders = useMemo(() => {
+        const sorted = sortOrdersByTime(!sortLatest);
+        if (tab === 'active') {
+            return sorted.filter((o) => o.status === 'placed' || o.status === 'prepared');
+        }
+        return sorted.filter((o) => o.status === 'ready');
+    }, [orders, tab, sortLatest]);
 
-    const renderOrder = ({ item }: { item: OrderItem }) => {
-        const cfg = STATUS_CONFIG[item.status];
+    const activeCount = orders.filter(
+        (o) => o.status === 'placed' || o.status === 'prepared'
+    ).length;
+
+    // ─── Actions ─────────────────────────────────────────────────────────────
+    const handleStatusAdvance = (order: Order) => {
+        const nextStatus: Record<string, OrderStatus | null> = {
+            placed: 'prepared',
+            prepared: 'ready',
+            ready: null,
+        };
+        const next = nextStatus[order.status];
+        if (!next) return;
+
+        updateOrderStatus(order.id, next);
+        sendOrderStatusNotification(order.orderId, next);
+    };
+
+    const handleCallCustomerCare = (phone: string) => {
+        Linking.openURL(`tel:${phone}`).catch(() => {
+            Alert.alert('Error', 'Unable to make the call');
+        });
+    };
+
+    // ─── Render Order Card ───────────────────────────────────────────────────
+    const renderOrder = ({ item }: { item: Order }) => {
+        const cfg = ORDER_STATUS_CONFIG[item.status];
+        const canAdvance = item.status !== 'ready';
+
         return (
-            <TouchableOpacity style={styles.card} activeOpacity={0.88}>
+            <View style={styles.card}>
                 <Image source={{ uri: item.restaurantImage }} style={styles.cardImage} />
                 <View style={styles.cardBody}>
                     {/* Top Row */}
@@ -114,7 +76,7 @@ export default function Orders() {
 
                     {/* Items */}
                     <Text style={styles.items} numberOfLines={1}>
-                        {item.items.join(' · ')}
+                        {item.items.map((i) => `${i.name} x${i.qty}`).join(' · ')}
                     </Text>
 
                     {/* Divider */}
@@ -124,42 +86,61 @@ export default function Orders() {
                     <View style={styles.cardBottomRow}>
                         {/* Status Pill */}
                         <View style={[styles.statusPill, { backgroundColor: cfg.bg }]}>
-                            <Ionicons name={cfg.icon} size={13} color={cfg.color} />
-                            <Text style={[styles.statusText, { color: cfg.color }]}>{cfg.label}</Text>
-                            {item.eta && (
-                                <Text style={[styles.etaText, { color: cfg.color }]}> · {item.eta}</Text>
-                            )}
+                            <Ionicons name={cfg.icon as any} size={13} color={cfg.color} />
+                            <Text style={[styles.statusText, { color: cfg.color }]}>
+                                {cfg.label}
+                            </Text>
                         </View>
 
                         {/* Total */}
-                        <Text style={styles.total}>{item.total}</Text>
+                        <Text style={styles.total}>₹{item.total}</Text>
                     </View>
 
-                    {/* Actions */}
-                    {(item.status === 'delivered') && (
-                        <TouchableOpacity style={styles.reorderBtn} activeOpacity={0.8}>
-                            <MaterialCommunityIcons name="repeat" size={15} color="#FFF" />
-                            <Text style={styles.reorderText}>Reorder</Text>
+                    {/* Action Buttons */}
+                    <View style={styles.actionRow}>
+                        {/* Advance Status (demo) */}
+                        {canAdvance && (
+                            <TouchableOpacity
+                                style={styles.advanceBtn}
+                                onPress={() => handleStatusAdvance(item)}
+                                activeOpacity={0.8}
+                            >
+                                <Ionicons name="arrow-forward-outline" size={14} color="#FFF" />
+                                <Text style={styles.advanceBtnText}>
+                                    {item.status === 'placed' ? 'Mark Prepared' : 'Mark Ready'}
+                                </Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {/* Customer Care */}
+                        <TouchableOpacity
+                            style={styles.careBtn}
+                            onPress={() => handleCallCustomerCare(item.customerCareNumber)}
+                            activeOpacity={0.8}
+                        >
+                            <Ionicons name="call-outline" size={14} color="#FF7A00" />
+                            <Text style={styles.careBtnText}>Customer Care</Text>
                         </TouchableOpacity>
-                    )}
-                    {(item.status === 'on_the_way' || item.status === 'preparing') && (
-                        <TouchableOpacity style={styles.trackBtn} activeOpacity={0.8}>
-                            <Ionicons name="location-outline" size={15} color="#FF7A00" />
-                            <Text style={styles.trackText}>Track Order</Text>
-                        </TouchableOpacity>
-                    )}
+                    </View>
                 </View>
-            </TouchableOpacity>
+            </View>
         );
     };
 
     return (
-        <SafeAreaView style={styles.container}>
+        <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             {/* Header */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>My Orders</Text>
-                <TouchableOpacity style={styles.filterIconBtn}>
-                    <Ionicons name="filter-outline" size={22} color="#181C2E" />
+                <TouchableOpacity
+                    style={styles.sortBtn}
+                    onPress={() => setSortLatest((prev) => !prev)}
+                >
+                    <MaterialCommunityIcons
+                        name={sortLatest ? 'sort-clock-descending-outline' : 'sort-clock-ascending-outline'}
+                        size={22}
+                        color="#181C2E"
+                    />
                 </TouchableOpacity>
             </View>
 
@@ -170,7 +151,7 @@ export default function Orders() {
                     onPress={() => setTab('active')}
                 >
                     <Text style={[styles.tabLabel, tab === 'active' && styles.tabLabelActive]}>
-                        Active {activeOrders.length > 0 && `(${activeOrders.length})`}
+                        Active {activeCount > 0 && `(${activeCount})`}
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -178,7 +159,7 @@ export default function Orders() {
                     onPress={() => setTab('past')}
                 >
                     <Text style={[styles.tabLabel, tab === 'past' && styles.tabLabelActive]}>
-                        Past Orders
+                        Completed
                     </Text>
                 </TouchableOpacity>
             </View>
@@ -193,8 +174,14 @@ export default function Orders() {
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <MaterialCommunityIcons name="receipt-text-outline" size={60} color="#D0D5DD" />
-                        <Text style={styles.emptyTitle}>No orders yet</Text>
-                        <Text style={styles.emptySubtitle}>Your order history will appear here</Text>
+                        <Text style={styles.emptyTitle}>
+                            {tab === 'active' ? 'No active orders' : 'No completed orders'}
+                        </Text>
+                        <Text style={styles.emptySubtitle}>
+                            {tab === 'active'
+                                ? 'Place an order to see it here'
+                                : 'Your completed orders will appear here'}
+                        </Text>
                     </View>
                 }
             />
@@ -215,7 +202,7 @@ const styles = StyleSheet.create({
         paddingBottom: 14,
     },
     headerTitle: { fontSize: 24, fontWeight: '700', color: '#181C2E' },
-    filterIconBtn: {
+    sortBtn: {
         width: 44,
         height: 44,
         borderRadius: 22,
@@ -237,7 +224,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderRadius: 10,
     },
-    tabBtnActive: { backgroundColor: '#FFF', elevation: 2, shadowColor: '#000', shadowOpacity: 0.05 },
+    tabBtnActive: {
+        backgroundColor: '#FFF',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOpacity: 0.05,
+    },
     tabLabel: { fontSize: 14, fontWeight: '600', color: '#A0A5BA' },
     tabLabelActive: { color: '#181C2E' },
     list: { paddingHorizontal: 20, paddingBottom: 100 },
@@ -271,33 +263,34 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     statusText: { fontSize: 12, fontWeight: '700' },
-    etaText: { fontSize: 12, fontWeight: '600' },
     total: { fontSize: 16, fontWeight: '700', color: '#181C2E' },
-    reorderBtn: {
+    actionRow: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 10,
+        flexWrap: 'wrap',
+    },
+    advanceBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: '#FF7A00',
         borderRadius: 10,
         paddingHorizontal: 14,
         paddingVertical: 8,
-        marginTop: 10,
-        alignSelf: 'flex-start',
         gap: 5,
     },
-    reorderText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
-    trackBtn: {
+    advanceBtnText: { color: '#FFF', fontWeight: '700', fontSize: 12 },
+    careBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1.5,
         borderColor: '#FF7A00',
         borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 8,
-        marginTop: 10,
-        alignSelf: 'flex-start',
+        paddingHorizontal: 12,
+        paddingVertical: 7,
         gap: 5,
     },
-    trackText: { color: '#FF7A00', fontWeight: '700', fontSize: 13 },
+    careBtnText: { color: '#FF7A00', fontWeight: '700', fontSize: 12 },
     emptyState: { alignItems: 'center', paddingTop: 80 },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: '#181C2E', marginTop: 16 },
     emptySubtitle: { fontSize: 13, color: '#A0A5BA', marginTop: 6 },
