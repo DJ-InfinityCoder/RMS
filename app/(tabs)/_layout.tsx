@@ -1,13 +1,17 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Text } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { HapticTab } from '@/components/haptic-tab';
+import { useCart } from '@/lib/CartContext';
 
 const ORANGE = '#FF7A00';
 const INACTIVE = '#A0A5BA';
 
 export default function TabLayout() {
+  const { items } = useCart();
+  const cartCount = items.length;
+
   return (
     <Tabs
       screenOptions={{
@@ -95,14 +99,21 @@ const TabIcon = ({
   children,
   focused,
   color,
+  badge,
 }: {
   children: React.ReactNode;
   focused: boolean;
   color: string;
+  badge?: number;
 }) => (
   <View style={tabIconStyles.wrapper}>
     <View style={[tabIconStyles.iconContainer, focused && tabIconStyles.iconContainerActive]}>
       {children}
+      {badge && badge > 0 && (
+        <View style={tabIconStyles.badge}>
+          <Text style={tabIconStyles.badgeText}>{badge > 9 ? '9+' : badge}</Text>
+        </View>
+      )}
     </View>
     {focused && <View style={tabIconStyles.dot} />}
   </View>
@@ -126,6 +137,23 @@ const tabIconStyles = StyleSheet.create({
     borderRadius: 3,
     backgroundColor: ORANGE,
     marginTop: 3,
+  },
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -6,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });
 

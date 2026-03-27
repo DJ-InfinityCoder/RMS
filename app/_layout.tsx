@@ -38,6 +38,7 @@ export default function RootLayout() {
               <Stack.Screen name="settings" options={{ headerShown: false }} />
               <Stack.Screen name="edit-profile" options={{ headerShown: false }} />
               <Stack.Screen name="map-directions" options={{ headerShown: false }} />
+              <Stack.Screen name="cart" options={{ headerShown: false, presentation: 'modal' }} />
               </Stack>
               <StatusBar style="auto" />
             </ThemeProvider>

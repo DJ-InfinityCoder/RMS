@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,88 +11,194 @@ import {
   TextInput,
   Alert,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-import { restaurants, Restaurant, MenuItem } from '@/data/restaurants';
 import { useUser } from '@/lib/UserContext';
 import { useCart } from '@/lib/CartContext';
+import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
+
+interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: string;
+  image_url: string;
+  allergens: string[];
+  ingredients: string[];
+  calories: number;
+}
+
+interface RestaurantData {
+  id: string;
+  name: string;
+  description: string;
+  address: string;
+  phone: string;
+  latitude: number;
+  longitude: number;
+  image_url: string;
+  cuisine: string[];
+  rating: number;
+  deliveryTime: string;
+}
 
 export default function RestaurantPage() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const restaurantId = typeof params.id === 'string' ? params.id : '1';
-  const restaurant = restaurants.find((r) => r.id === restaurantId) ?? restaurants[0];
+  const restaurantId = typeof params.id === 'string' ? params.id : '';
 
   const { preferences } = useUser();
-  const { addItem } = useCart();
+  const { addItem, items } = useCart();
 
+  const [restaurant, setRestaurant] = useState<RestaurantData | null>(null);
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isBookingVisible, setBookingVisible] = useState(false);
-  const [isOffersVisible, setOffersVisible] = useState(false);
-  const [isCriticsVisible, setCriticsVisible] = useState(false);
-
-  // Booking State
   const [guests, setGuests] = useState('2');
   const [selectedSlot, setSelectedSlot] = useState('');
 
-  // ─── Categories from restaurant menu ──────────────────────────────────────
+  useEffect(() => {
+    fetchRestaurantData();
+  }, [restaurantId]);
+
+  const fetchRestaurantData = async () => {
+    if (!restaurantId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Fetch restaurant
+      const { data: restData, error: restError } = await supabase
+        .from('restaurants')
+        .select('*')
+        .eq('id', restaurantId)
+        .single();
+
+      if (restError) throw restError;
+
+      if (restData) {
+        setRestaurant({
+          id: restData.id,
+          name: restData.name || 'Restaurant',
+          description: restData.description || 'Delicious food awaits you',
+          address: restData.address || '',
+          phone: restData.phone || '',
+          latitude: restData.latitude || 0,
+          longitude: restData.longitude || 0,
+          image_url: restData.image_url || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600',
+          cuisine: ['Indian', 'Continental'],
+          rating: 4.5,
+          deliveryTime: '25 min',
+        });
+      }
+
+      // Fetch menu items
+      const { data: dishData, error: dishError } = await supabase
+        .from('dishes')
+        .select('*')
+        .eq('restaurant_id', restaurantId)
+        .eq('is_available', true);
+
+      if (dishError) throw dishError;
+
+      if (dishData) {
+        const items: MenuItem[] = dishData.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          description: d.description || 'Tasty dish',
+          price: Number(d.price) || 0,
+          category: d.recommended_for || 'Main Course',
+          image_url: d.image_url || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400',
+          allergens: d.allergens ? [d.allergens] : [],
+          ingredients: [d.cooking_method || 'Fresh ingredients'],
+          calories: d.calories || 300,
+        }));
+        setMenuItems(items);
+      }
+    } catch (error) {
+      console.error('Error fetching restaurant:', error);
+      Alert.alert('Error', 'Failed to load restaurant data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cartItemCount = useMemo(() => {
+    return items.reduce((sum, item) => sum + item.qty, 0);
+  }, [items]);
+
   const categories = useMemo(() => {
     const cats = new Set<string>();
-    restaurant.menuItems.forEach((m) => cats.add(m.category));
+    menuItems.forEach((m) => cats.add(m.category));
     return ['All', ...Array.from(cats)];
-  }, [restaurant]);
+  }, [menuItems]);
 
-  // ─── Filter & Allergen Detection ──────────────────────────────────────────
   const filteredItems = useMemo(() => {
-    let items = restaurant.menuItems;
-    if (selectedCategory !== 'All') {
-      items = items.filter((m) => m.category === selectedCategory);
-    }
-    return items;
-  }, [restaurant, selectedCategory]);
+    if (selectedCategory === 'All') return menuItems;
+    return menuItems.filter((m) => m.category === selectedCategory);
+  }, [menuItems, selectedCategory]);
 
   const hasAllergen = (item: MenuItem): boolean => {
     return item.allergens.some((a) =>
-      preferences.allergies.some(
-        (ua) => ua.toLowerCase() === a.toLowerCase()
-      )
+      preferences.allergies.some((ua) => ua.toLowerCase() === a.toLowerCase())
     );
   };
 
   const getMatchingAllergens = (item: MenuItem): string[] => {
     return item.allergens.filter((a) =>
-      preferences.allergies.some(
-        (ua) => ua.toLowerCase() === a.toLowerCase()
-      )
+      preferences.allergies.some((ua) => ua.toLowerCase() === a.toLowerCase())
     );
   };
 
-  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleAddToCart = (item: MenuItem) => {
+    if (!restaurant) return;
+    
     if (hasAllergen(item)) {
       const allergens = getMatchingAllergens(item);
       Alert.alert(
-        '⚠️ Allergen Warning',
+        'Allergen Warning',
         `This item contains: ${allergens.join(', ')}.\nAre you sure you want to add it?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Add Anyway',
             onPress: () => {
-              addItem({ id: item.id, name: item.name, price: item.price });
+              addItem({
+                id: item.id,
+                name: item.name,
+                price: item.price,
+                restaurantId: restaurant.id,
+                restaurantName: restaurant.name,
+              });
               Alert.alert('Added!', `${item.name} added to cart`);
             },
           },
         ]
       );
     } else {
-      addItem({ id: item.id, name: item.name, price: item.price });
+      addItem({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        restaurantId: restaurant.id,
+        restaurantName: restaurant.name,
+      });
       Alert.alert('Added!', `${item.name} added to cart`);
     }
+  };
+
+  const handleOpenMap = () => {
+    if (!restaurant) return;
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${restaurant.latitude},${restaurant.longitude}`;
+    Linking.openURL(url);
   };
 
   const handleBookTable = () => {
@@ -100,48 +206,74 @@ export default function RestaurantPage() {
       Alert.alert('Select Slot', 'Please select a time slot');
       return;
     }
-    const slot = restaurant.tableSlots.find((s) => s.time === selectedSlot);
-    if (!slot) return;
-
-    const guestCount = parseInt(guests, 10) || 2;
-    if (slot.bookedSeats + guestCount > slot.totalSeats) {
-      Alert.alert('No Seats', 'Not enough seats available for this slot');
-      return;
-    }
-
-    Alert.alert('Success', `Table booked for ${guestCount} guests at ${selectedSlot}!`);
+    Alert.alert('Success', `Table booked for ${guests} guests at ${selectedSlot}!`);
     setBookingVisible(false);
   };
 
-  const handleOpenMap = () => {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${restaurant.latitude},${restaurant.longitude}`;
-    Linking.openURL(url);
-  };
+  const tableSlots = [
+    { time: '6:00 PM', totalSeats: 10, bookedSeats: 3 },
+    { time: '6:30 PM', totalSeats: 10, bookedSeats: 5 },
+    { time: '7:00 PM', totalSeats: 10, bookedSeats: 10 },
+    { time: '7:30 PM', totalSeats: 10, bookedSeats: 2 },
+    { time: '8:00 PM', totalSeats: 10, bookedSeats: 7 },
+    { time: '8:30 PM', totalSeats: 10, bookedSeats: 4 },
+  ];
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF7A00" />
+          <Text style={styles.loadingText}>Loading restaurant...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!restaurant) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="restaurant-outline" size={48} color="#A0A5BA" />
+          <Text style={styles.loadingText}>Restaurant not found</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Text style={styles.backButtonText}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.iconButton} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={24} color="#181C2E" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Restaurant Details</Text>
-        <TouchableOpacity style={styles.iconButton} onPress={handleOpenMap}>
-          <Ionicons name="map-outline" size={22} color="#FF7A00" />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>{restaurant.name}</Text>
+        <View style={{ flexDirection: 'row' }}>
+          <TouchableOpacity style={[styles.iconButton, { marginRight: 10 }]} onPress={() => router.push('/(tabs)/cart')}>
+            <Ionicons name="cart-outline" size={22} color="#FF7A00" />
+            {cartItemCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{cartItemCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton} onPress={handleOpenMap}>
+            <Ionicons name="map-outline" size={22} color="#FF7A00" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Hero Image */}
-        <Image source={{ uri: restaurant.image }} style={styles.heroImage} />
+        <Image source={{ uri: restaurant.image_url }} style={styles.heroImage} />
 
-        {/* Restaurant Info */}
         <View style={styles.infoSection}>
           <Text style={styles.restaurantName}>{restaurant.name}</Text>
           <Text style={styles.cuisineTags}>{restaurant.cuisine.join(' • ')}</Text>
           <Text style={styles.description}>{restaurant.description}</Text>
 
-          {/* Stats */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <Ionicons name="star" size={18} color="#FF7622" />
@@ -155,48 +287,30 @@ export default function RestaurantPage() {
               <Ionicons name="time-outline" size={18} color="#FF7622" />
               <Text style={styles.statText}>{restaurant.deliveryTime}</Text>
             </View>
-            <View style={styles.statItem}>
-              <Ionicons name="call-outline" size={18} color="#FF7622" />
-              <Text style={styles.statText}>{restaurant.phone.slice(-10)}</Text>
-            </View>
           </View>
 
-          {/* Action Buttons Row */}
           <View style={styles.actionRow}>
             <TouchableOpacity style={styles.actionButton} onPress={() => setBookingVisible(true)}>
               <MaterialCommunityIcons name="table-chair" size={18} color="#FFF" />
               <Text style={styles.actionButtonText}>Book Table</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionButton, styles.secondaryBtn]} onPress={() => setOffersVisible(true)}>
-              <MaterialCommunityIcons name="tag-outline" size={18} color="#FFF" />
-              <Text style={styles.actionButtonText}>Offers ({restaurant.offers.length})</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionButton, styles.criticBtn]} onPress={() => setCriticsVisible(true)}>
-              <FontAwesome5 name="medal" size={16} color="#FFF" />
-              <Text style={styles.actionButtonText}>Critics</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
-        {/* ─── Menu Section ──────────────────────────────────────────── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Menu</Text>
           <Text style={styles.menuCount}>{filteredItems.length} items</Text>
         </View>
 
-        {/* Allergen Warning */}
         {preferences.allergies.length > 0 && (
           <View style={styles.allergenBanner}>
             <Ionicons name="warning" size={16} color="#EF4444" />
             <Text style={styles.allergenBannerText}>
-              Items with your allergens ({preferences.allergies.join(', ')}) are flagged 🚩
+              Items with your allergens ({preferences.allergies.join(', ')}) are flagged
             </Text>
           </View>
         )}
 
-        {/* Categories */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -223,7 +337,6 @@ export default function RestaurantPage() {
           ))}
         </ScrollView>
 
-        {/* Menu Items Grid */}
         <View style={styles.popularSection}>
           {filteredItems.length > 0 ? (
             <View style={styles.grid}>
@@ -236,24 +349,17 @@ export default function RestaurantPage() {
                     key={item.id}
                     style={[styles.card, isAllergen && styles.cardAllergen]}
                   >
-                    {/* Allergen Flag */}
                     {isAllergen && (
                       <View style={styles.allergenFlag}>
-                        <Text style={styles.allergenFlagText}>🚩 {matchedAllergens.join(', ')}</Text>
+                        <Text style={styles.allergenFlagText}>{matchedAllergens.join(', ')}</Text>
                       </View>
                     )}
 
-                    <Image source={{ uri: item.image }} style={styles.cardImage} />
+                    <Image source={{ uri: item.image_url }} style={styles.cardImage} />
                     <View style={styles.cardContent}>
                       <Text style={styles.cardTitle} numberOfLines={1}>{item.name}</Text>
                       <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
 
-                      {/* Ingredients */}
-                      <Text style={styles.cardIngredients} numberOfLines={1}>
-                        {item.ingredients.join(' · ')}
-                      </Text>
-
-                      {/* Meta */}
                       <Text style={styles.cardMeta}>{item.calories} kcal</Text>
 
                       <View style={styles.priceRow}>
@@ -274,39 +380,8 @@ export default function RestaurantPage() {
             <Text style={styles.noItemsText}>No items in this category yet.</Text>
           )}
         </View>
-
-        {/* ─── Reviews Section ───────────────────────────────────────── */}
-        <View style={styles.reviewsSection}>
-          <Text style={styles.sectionTitle}>Reviews & Ratings</Text>
-          {restaurant.reviews.map((review) => (
-            <View key={review.id} style={styles.reviewCard}>
-              <Image source={{ uri: review.avatar }} style={styles.avatar} />
-              <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={styles.reviewName}>{review.user}</Text>
-                  <Text style={styles.reviewDate}>{review.date}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Ionicons
-                      key={s}
-                      name={s <= review.rating ? 'star' : 'star-outline'}
-                      size={14}
-                      color="#FF7622"
-                    />
-                  ))}
-                </View>
-                <Text style={styles.reviewComment}>{review.comment}</Text>
-              </View>
-            </View>
-          ))}
-          <TouchableOpacity style={styles.writeReviewBtn}>
-            <Text style={styles.writeReviewText}>Write a Review</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
 
-      {/* ─── Booking Modal ─────────────────────────────────────────── */}
       <Modal
         animationType="slide"
         transparent
@@ -327,7 +402,7 @@ export default function RestaurantPage() {
 
             <Text style={styles.label}>Select Time Slot</Text>
             <View style={styles.slotGrid}>
-              {restaurant.tableSlots.map((slot) => {
+              {tableSlots.map((slot) => {
                 const available = slot.totalSeats - slot.bookedSeats;
                 const isFull = available <= 0;
                 return (
@@ -370,92 +445,34 @@ export default function RestaurantPage() {
           </View>
         </View>
       </Modal>
-
-      {/* ─── Offers Modal ──────────────────────────────────────────── */}
-      <Modal
-        animationType="fade"
-        transparent
-        visible={isOffersVisible}
-        onRequestClose={() => setOffersVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Special Offers</Text>
-            {restaurant.offers.map((offer) => (
-              <View key={offer.id} style={styles.offerCard}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.offerTitle}>{offer.title}</Text>
-                  <Text style={styles.offerDesc}>{offer.description}</Text>
-                </View>
-                <View style={styles.codeBox}>
-                  <Text style={styles.codeText}>{offer.code}</Text>
-                </View>
-              </View>
-            ))}
-            {restaurant.offers.length === 0 && (
-              <Text style={styles.noItemsText}>No active offers right now</Text>
-            )}
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setOffersVisible(false)}>
-              <Text style={styles.cancelBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ─── Critics Modal ─────────────────────────────────────────── */}
-      <Modal
-        animationType="slide"
-        transparent
-        visible={isCriticsVisible}
-        onRequestClose={() => setCriticsVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
-              <FontAwesome5 name="medal" size={24} color="#FFD700" style={{ marginRight: 10 }} />
-              <Text style={styles.modalTitle}>Expert Critics</Text>
-            </View>
-            <Text style={{ textAlign: 'center', color: '#666', marginBottom: 20 }}>
-              Verified reviews from authenticated food critics.
-            </Text>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {restaurant.criticReviews.map((critic) => (
-                <View key={critic.id} style={styles.criticCard}>
-                  <View style={styles.criticHeader}>
-                    <Image source={{ uri: critic.avatar }} style={styles.criticAvatar} />
-                    <View>
-                      <Text style={styles.criticName}>
-                        {critic.name} <MaterialCommunityIcons name="check-decagram" size={14} color="#1DA1F2" />
-                      </Text>
-                      <Text style={styles.criticCredential}>{critic.credential}</Text>
-                    </View>
-                    <View style={styles.criticRatingBox}>
-                      <Text style={styles.criticRatingText}>{critic.rating}</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.criticReviewText}>"{critic.review}"</Text>
-                </View>
-              ))}
-              {restaurant.criticReviews.length === 0 && (
-                <Text style={styles.noItemsText}>No critic reviews yet</Text>
-              )}
-            </ScrollView>
-
-            <TouchableOpacity style={styles.cancelBtn} onPress={() => setCriticsVisible(false)}>
-              <Text style={styles.cancelBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#A0A5BA',
+    fontSize: 14,
+  },
+  backButton: {
+    marginTop: 20,
+    backgroundColor: '#FF7A00',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -471,7 +488,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#181C2E' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#181C2E', flex: 1, marginLeft: 10 },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF7A00',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#F0F5FA',
+    zIndex: 1,
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 9,
+    fontWeight: '800',
+  },
   scrollContent: { paddingBottom: 40 },
   heroImage: {
     width: width - 40,
@@ -488,22 +524,18 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 4 },
   statItem: { flexDirection: 'row', alignItems: 'center', marginRight: 20 },
   statText: { fontSize: 13, fontWeight: '600', color: '#181C2E', marginLeft: 6 },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  actionRow: { flexDirection: 'row', justifyContent: 'flex-start' },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     backgroundColor: '#FF7622',
     paddingVertical: 12,
+    paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 8,
   },
-  secondaryBtn: { backgroundColor: '#181C2E' },
-  criticBtn: { backgroundColor: '#333', marginRight: 0 },
   actionButtonText: { color: '#FFF', fontWeight: '700', marginLeft: 6, fontSize: 12 },
 
-  // Menu
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -581,7 +613,6 @@ const styles = StyleSheet.create({
   cardContent: {},
   cardTitle: { fontSize: 14, fontWeight: '700', color: '#181C2E', marginBottom: 2 },
   cardDesc: { fontSize: 11, color: '#A0A5BA', marginBottom: 4, lineHeight: 16 },
-  cardIngredients: { fontSize: 10, color: '#6B7280', marginBottom: 4 },
   cardMeta: { fontSize: 11, color: '#A0A5BA', marginBottom: 8 },
   priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   priceText: { fontSize: 16, fontWeight: '700', color: '#181C2E' },
@@ -595,30 +626,8 @@ const styles = StyleSheet.create({
   },
   addButtonAllergen: { backgroundColor: '#EF4444' },
 
-  // Reviews
-  reviewsSection: { paddingHorizontal: 24, marginBottom: 30 },
-  reviewCard: {
-    flexDirection: 'row',
-    backgroundColor: '#F8F9FB',
-    padding: 12,
-    borderRadius: 14,
-    marginTop: 12,
-  },
-  avatar: { width: 40, height: 40, borderRadius: 20, marginRight: 12 },
-  reviewName: { fontWeight: '700', color: '#181C2E', fontSize: 14 },
-  reviewDate: { color: '#A0A5BA', fontSize: 12 },
-  reviewComment: { color: '#666', fontSize: 13, marginTop: 4, lineHeight: 18 },
-  writeReviewBtn: {
-    padding: 14,
-    borderWidth: 1.5,
-    borderColor: '#181C2E',
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  writeReviewText: { fontWeight: '700', color: '#181C2E' },
+  noItemsText: { textAlign: 'center', color: '#999', marginTop: 20 },
 
-  // Modals
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -636,7 +645,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: '#A0A5BA', marginBottom: 6, fontWeight: '600' },
   input: { backgroundColor: '#F0F5FA', padding: 14, borderRadius: 12, marginBottom: 14, fontSize: 15 },
 
-  // Table Slots
   slotGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
   slotCard: {
     backgroundColor: '#F0F5FA',
@@ -659,54 +667,4 @@ const styles = StyleSheet.create({
   confirmBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   cancelBtn: { padding: 14, alignItems: 'center' },
   cancelBtnText: { color: '#A0A5BA', fontWeight: '600' },
-
-  // Offers
-  offerCard: {
-    borderWidth: 1,
-    borderColor: '#EEE',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  offerTitle: { fontWeight: '700', fontSize: 16, color: '#FF7622' },
-  offerDesc: { color: '#666', fontSize: 12, marginTop: 2 },
-  codeBox: {
-    backgroundColor: '#FFF4E5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: '#FF7622',
-  },
-  codeText: { fontWeight: '700', color: '#FF7622' },
-
-  // Critics
-  criticCard: {
-    marginBottom: 16,
-    padding: 16,
-    backgroundColor: '#F8F9FB',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#EFEFEF',
-  },
-  criticHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  criticAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
-  criticName: { fontSize: 15, fontWeight: '700', color: '#181C2E' },
-  criticCredential: { fontSize: 12, color: '#FF7622', fontWeight: '600' },
-  criticRatingBox: {
-    marginLeft: 'auto',
-    backgroundColor: '#181C2E',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-  },
-  criticRatingText: { color: '#FFF', fontWeight: '700' },
-  criticReviewText: { fontStyle: 'italic', color: '#444', lineHeight: 20 },
-
-  noItemsText: { textAlign: 'center', color: '#999', marginTop: 20 },
-
-  seeAll: { color: '#FF7622', fontWeight: '600' },
 });

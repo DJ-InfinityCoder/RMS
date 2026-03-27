@@ -29,8 +29,8 @@ import {
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StructuredMenu, MenuSection, MenuItem } from '@/services/llm';
-import { getFallbackImage } from '@/services/search';
+import { StructuredMenu, MenuSection, MenuItem } from '@/api/llmApi';
+import { getFallbackImage } from '@/api/searchApi';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W = SCREEN_W - 40;

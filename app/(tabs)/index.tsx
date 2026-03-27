@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,21 +10,16 @@ import {
   Dimensions,
   ActivityIndicator,
   Platform,
+  RefreshControl,
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import useUserLocation from '@/hooks/useUserLocation';
-import { restaurants, getAllCategories } from '@/data/restaurants';
-
-// ✅ FIX: correct MapView import
-let MapView: any, Marker: any;
-if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-}
+import { getRestaurants, DBRestaurant } from '@/api/restaurantApi';
+import { getCurrentUser } from '@/api/authApi';
+import { useCart } from '@/lib/CartContext';
 
 const { width } = Dimensions.get('window');
 
@@ -40,7 +35,45 @@ const QUICK_CATEGORIES = [
 export default function HomeScreen() {
   const region = useUserLocation();
   const router = useRouter();
+  const { items } = useCart();
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [restaurants, setRestaurants] = useState<DBRestaurant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [userName, setUserName] = useState('Guest');
+
+  useEffect(() => {
+    fetchData();
+    fetchUser();
+  }, []);
+
+  const cartItemCount = useMemo(() => {
+    return items.reduce((sum, item) => sum + item.qty, 0);
+  }, [items]);
+
+  const fetchData = async () => {
+    try {
+      const data = await getRestaurants();
+      setRestaurants(data);
+    } catch (error) {
+      console.error('Error fetching restaurants:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const fetchUser = async () => {
+    const user = await getCurrentUser();
+    if (user?.full_name) {
+      setUserName(user.full_name.split(' ')[0]);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
 
   // ─── Time-based Greeting ───────────────────────────────────────────────────
   const greeting = useMemo(() => {
@@ -52,23 +85,17 @@ export default function HomeScreen() {
 
   // ─── Category filter ───────────────────────────────────────────────────────
   const filteredRestaurants = useMemo(() => {
-    if (!region) return [];
-    const delta = 0.05;
-    const nearby = restaurants.filter(
-      (res) =>
-        Math.abs(res.latitude - region.latitude) < delta &&
-        Math.abs(res.longitude - region.longitude) < delta
-    );
+    if (!region || restaurants.length === 0) return [];
+    
+    // In a real app, you'd filter by distance here if not done in DB
+    const nearby = restaurants; 
 
     if (selectedCategory === 'All') return nearby;
 
     return nearby.filter((res) =>
-      res.cuisine.some((c) => c.toLowerCase().includes(selectedCategory.toLowerCase())) ||
-      res.menuItems.some(
-        (m) => m.category.toLowerCase().includes(selectedCategory.toLowerCase())
-      )
+      res.cuisine.some((c) => c.toLowerCase().includes(selectedCategory.toLowerCase()))
     );
-  }, [region, selectedCategory]);
+  }, [region, selectedCategory, restaurants]);
 
   const renderCategory = ({ item }: { item: (typeof QUICK_CATEGORIES)[0] }) => (
     <TouchableOpacity
@@ -95,13 +122,13 @@ export default function HomeScreen() {
     </TouchableOpacity>
   );
 
-  const renderRestaurant = ({ item }: { item: (typeof restaurants)[0] }) => (
+  const renderRestaurant = ({ item }: { item: DBRestaurant & { dishes?: any[] } }) => (
     <TouchableOpacity
       style={styles.restaurantCard}
       onPress={() => router.push(`/restaurant/${item.id}` as any)}
       activeOpacity={0.85}
     >
-      <Image source={{ uri: item.image }} style={styles.resImage} />
+      <Image source={{ uri: item.image_url || '' }} style={styles.resImage} />
       <View style={styles.resInfo}>
         <Text style={styles.resName}>{item.name}</Text>
         <Text style={styles.resCuisine}>{item.cuisine.join(' • ')}</Text>
@@ -118,7 +145,7 @@ export default function HomeScreen() {
           <View style={styles.resMetaDot} />
           <View style={styles.resMetaItem}>
             <Ionicons name="restaurant-outline" size={14} color="#A0A5BA" />
-            <Text style={styles.resMetaText}>{item.menuItems.length} items</Text>
+            <Text style={styles.resMetaText}>{item.dishes?.length || 0} items</Text>
           </View>
         </View>
       </View>
@@ -142,15 +169,28 @@ export default function HomeScreen() {
         {/* ─── Clean Minimal Header ──────────────────────────────────────── */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.greetingSmall}>Hey Bharat,</Text>
+            <Text style={styles.greetingSmall}>Hey {userName},</Text>
             <Text style={styles.greetingBold}>{greeting}! 👋</Text>
           </View>
-          <TouchableOpacity
-            style={styles.notifBtn}
-            onPress={() => router.push('/settings' as any)}
-          >
-            <Ionicons name="settings-outline" size={22} color="#181C2E" />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <TouchableOpacity
+              style={styles.notifBtn}
+              onPress={() => router.push('/cart' as any)}
+            >
+              <Ionicons name="cart-outline" size={22} color="#181C2E" />
+              {cartItemCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{cartItemCount}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.notifBtn, { marginLeft: 10 }]}
+              onPress={() => router.push('/settings' as any)}
+            >
+              <Ionicons name="settings-outline" size={22} color="#181C2E" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ─── Search Bar ────────────────────────────────────────────────── */}
@@ -181,7 +221,7 @@ export default function HomeScreen() {
 
           <TouchableOpacity
             style={[styles.scanButton, styles.scanButtonAlt]}
-            onPress={() => router.push('/scanner?mode=ocr' as any)}
+            onPress={() => router.push('/snap-menu' as any)}
             activeOpacity={0.85}
           >
             <View style={styles.scanIconWrapAlt}>
@@ -212,37 +252,6 @@ export default function HomeScreen() {
           renderItem={renderCategory}
           contentContainerStyle={styles.categoryList}
         />
-
-        {/* ─── Map ───────────────────────────────────────────────────────── */}
-        {Platform.OS !== 'web' && MapView && (
-          <View style={styles.mapContainer}>
-            <MapView
-              style={{ flex: 1 }}
-              initialRegion={{
-                latitude: region.latitude,
-                longitude: region.longitude,
-                latitudeDelta: delta,
-                longitudeDelta:
-                  delta *
-                  (Dimensions.get('window').width /
-                    Dimensions.get('window').height),
-              }}
-              showsUserLocation
-            >
-              {filteredRestaurants.map((res) => (
-                <Marker
-                  key={res.id}
-                  coordinate={{
-                    latitude: res.latitude,
-                    longitude: res.longitude,
-                  }}
-                  title={res.name}
-                  description={`⭐ ${res.rating}`}
-                />
-              ))}
-            </MapView>
-          </View>
-        )}
 
         {/* ─── Restaurants ───────────────────────────────────────────────── */}
         <View style={styles.sectionHeader}>
@@ -323,6 +332,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#F0F5FA',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF7A00',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FBFCFF',
+  },
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
 
   // ── Search ──
