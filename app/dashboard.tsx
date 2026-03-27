@@ -1,32 +1,100 @@
+import { AddDishForm } from '@/components/admin/AddDishForm';
+import { OrderTracker } from '@/components/admin/OrderTracker';
+import { RestaurantProfile } from '@/components/admin/RestaurantProfile';
 import { AuthTheme } from '@/constants/AuthTheme';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import { Modal, Portal } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function DashboardScreen() {
     const router = useRouter();
+    const [isFormVisible, setIsFormVisible] = useState(false);
+    const [isProfileVisible, setIsProfileVisible] = useState(false);
+    const [restaurantId, setRestaurantId] = useState<string | null>(null);
+    const [restaurantName, setRestaurantName] = useState('Restaurant Admin');
+    const [stats, setStats] = useState([
+        { label: 'Total Orders', value: '0', icon: 'cart-outline', color: '#4CAF50' },
+        { label: 'Pending', value: '0', icon: 'time-outline', color: '#FF9800' },
+        { label: 'Completed', value: '0', icon: 'checkmark-circle-outline', color: '#2196F3' },
+        { label: 'Revenue', value: '₹0', icon: 'cash-outline', color: '#9C27B0' },
+    ]);
+    const [loadingData, setLoadingData] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
-    const stats = [
-        { label: 'Total Orders', value: '128', icon: 'cart-outline', color: '#4CAF50' },
-        { label: 'Pending', value: '12', icon: 'time-outline', color: '#FF9800' },
-        { label: 'Completed', value: '116', icon: 'checkmark-circle-outline', color: '#2196F3' },
-        { label: 'Revenue', value: '$1,250', icon: 'cash-outline', color: '#9C27B0' },
-    ];
+    useEffect(() => {
+        fetchInitialData();
+    }, []);
 
-    const recentActivities = [
-        { id: '1', title: 'New order placed', time: '2 mins ago', icon: 'notifications-outline' },
-        { id: '2', title: 'Payment received', time: '15 mins ago', icon: 'card-outline' },
-        { id: '3', title: 'Order delivered', time: '1 hour ago', icon: 'bicycle-outline' },
-    ];
+    const fetchInitialData = async () => {
+        try {
+            // In a real app, we'd get this from an auth context
+            const response = await fetch('/api/restaurants');
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.length > 0) {
+                    const id = data[0].id; // Use first one for demo if no session
+                    setRestaurantId(id);
+                    await fetchStats(id);
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching initial data:', error);
+        } finally {
+            setLoadingData(false);
+        }
+    };
+
+    const fetchStats = async (id: string) => {
+        try {
+            const response = await fetch(`/api/restaurants/${id}/stats`);
+            if (response.ok) {
+                const data = await response.json();
+                setStats(data.stats);
+                setRestaurantName(data.restaurantName);
+            }
+        } catch (error) {
+            console.error('Error fetching stats:', error);
+        }
+    };
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        if (restaurantId) {
+            await fetchStats(restaurantId);
+        }
+        setRefreshing(false);
+    };
+
+    const handleAddMenuPress = () => {
+        if (!restaurantId) {
+            Alert.alert('Error', 'No restaurant found. Please check your account setup.');
+            return;
+        }
+        setIsFormVisible(true);
+    };
+
+    const handleFormSuccess = () => {
+        setIsFormVisible(false);
+        if (restaurantId) fetchStats(restaurantId);
+    };
+
+    if (loadingData) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={AuthTheme.colors.primary} />
+            </View>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <View>
                     <Text style={styles.welcomeText}>Welcome back,</Text>
-                    <Text style={styles.userName}>Restaurant Admin</Text>
+                    <Text style={styles.userName}>{restaurantName}</Text>
                 </View>
                 <TouchableOpacity 
                     style={styles.profileButton}
@@ -36,7 +104,13 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+            >
                 {/* Stats Grid */}
                 <View style={styles.statsGrid}>
                     {stats.map((stat, index) => (
@@ -50,37 +124,64 @@ export default function DashboardScreen() {
                     ))}
                 </View>
 
-                {/* Recent Activity */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Recent Activity</Text>
-                    {recentActivities.map((activity) => (
-                        <View key={activity.id} style={styles.activityItem}>
-                            <View style={styles.activityIcon}>
-                                <Ionicons name={activity.icon as any} size={20} color="#666" />
-                            </View>
-                            <View style={styles.activityInfo}>
-                                <Text style={styles.activityTitle}>{activity.title}</Text>
-                                <Text style={styles.activityTime}>{activity.time}</Text>
-                            </View>
-                        </View>
-                    ))}
-                </View>
-
                 {/* Quick Actions */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Quick Actions</Text>
                     <View style={styles.actionRow}>
-                        <TouchableOpacity style={styles.actionButton}>
+                        <TouchableOpacity 
+                            style={styles.actionButton}
+                            onPress={handleAddMenuPress}
+                        >
                             <Ionicons name="add-circle-outline" size={24} color="white" />
                             <Text style={styles.actionButtonText}>Add Menu</Text>
                         </TouchableOpacity>
-                        <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#666' }]}>
-                            <Ionicons name="settings-outline" size={24} color="white" />
-                            <Text style={styles.actionButtonText}>Settings</Text>
+                        <TouchableOpacity 
+                            style={[styles.actionButton, { backgroundColor: '#666' }]}
+                            onPress={() => setIsProfileVisible(true)}
+                        >
+                            <Ionicons name="business-outline" size={24} color="white" />
+                            <Text style={styles.actionButtonText}>Profile</Text>
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {/* Order Tracker */}
+                <View style={[styles.section, { flex: 1 }]}>
+                    <Text style={styles.sectionTitle}>Order Tracker</Text>
+                    {restaurantId ? (
+                        <OrderTracker restaurantId={restaurantId} />
+                    ) : (
+                        <Text>Loading order tracker...</Text>
+                    )}
+                </View>
             </ScrollView>
+            <Portal>
+                <Modal
+                    visible={isFormVisible}
+                    onDismiss={() => setIsFormVisible(false)}
+                    contentContainerStyle={styles.modalContainer}
+                >
+                    {restaurantId && (
+                        <AddDishForm 
+                            restaurantId={restaurantId}
+                            onSuccess={handleFormSuccess}
+                            onCancel={() => setIsFormVisible(false)}
+                        />
+                    )}
+                </Modal>
+
+                <Modal
+                    visible={isProfileVisible}
+                    onDismiss={() => setIsProfileVisible(false)}
+                    contentContainerStyle={styles.modalContainer}
+                >
+                    {restaurantId && (
+                        <RestaurantProfile 
+                            restaurantId={restaurantId}
+                        />
+                    )}
+                </Modal>
+            </Portal>
         </SafeAreaView>
     );
 }
@@ -211,5 +312,9 @@ const styles = StyleSheet.create({
         color: '#FFF',
         fontWeight: 'bold',
         fontSize: 15,
+    },
+    modalContainer: {
+        margin: 20,
+        backgroundColor: 'transparent',
     },
 });

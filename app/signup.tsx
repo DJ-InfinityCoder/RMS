@@ -4,16 +4,18 @@ import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { AuthTheme } from '@/constants/AuthTheme';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function SignUpScreen() {
     const router = useRouter();
     const [formData, setFormData] = useState({
-        name: '',
         email: '',
-        phone: '',
         password: '',
         confirmPassword: '',
+        restaurantName: '',
+        restaurantAddress: '',
+        city: '',
+        restaurantPhone: '',
     });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
@@ -21,20 +23,14 @@ export default function SignUpScreen() {
     const validateForm = () => {
         const newErrors: Record<string, string> = {};
 
-        if (!formData.name.trim()) {
-            newErrors.name = 'Name is required';
+        if (!formData.restaurantName.trim()) {
+            newErrors.restaurantName = 'Restaurant name is required';
         }
 
         if (!formData.email.trim()) {
             newErrors.email = 'Email is required';
         } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
             newErrors.email = 'Invalid email format';
-        }
-
-        if (!formData.phone.trim()) {
-            newErrors.phone = 'Phone number is required';
-        } else if (formData.phone.length < 10) {
-            newErrors.phone = 'Invalid phone number';
         }
 
         if (!formData.password) {
@@ -62,10 +58,12 @@ export default function SignUpScreen() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    name: formData.name,
+                    name: formData.restaurantName,
                     email: formData.email,
-                    phone: formData.phone,
                     password: formData.password,
+                    restaurantAddress: formData.restaurantAddress,
+                    city: formData.city,
+                    restaurantPhone: formData.restaurantPhone,
                 }),
             });
 
@@ -89,62 +87,81 @@ export default function SignUpScreen() {
 
     return (
         <AuthContainer
-            title="Sign Up"
-            subtitle="Please sign up to get started"
+            title="Register Restaurant"
+            subtitle="Create an account and set up your restaurant"
             headerHeight={25}
         >
             <View style={styles.content}>
-                <View style={styles.formContainer}>
-                    <CustomTextInput
-                        label="Name"
-                        value={formData.name}
-                        onChangeText={(text) => setFormData({ ...formData, name: text })}
-                        placeholder="Enter your name"
-                        error={errors.name}
-                        autoCapitalize="words"
-                    />
+                <ScrollView showsVerticalScrollIndicator={false}>
+                    <View style={styles.formContainer}>
+                        <Text style={styles.sectionHeader}>Restaurant Account Details</Text>
+                        
+                        <CustomTextInput
+                            label="Restaurant Name"
+                            value={formData.restaurantName}
+                            onChangeText={(text) => setFormData({ ...formData, restaurantName: text })}
+                            placeholder="e.g. The Spicy Bistro"
+                            error={errors.restaurantName}
+                        />
 
-                    <CustomTextInput
-                        label="Email"
-                        value={formData.email}
-                        onChangeText={(text) => setFormData({ ...formData, email: text })}
-                        placeholder="Enter your email"
-                        error={errors.email}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                    />
+                        <CustomTextInput
+                            label="Email Address"
+                            value={formData.email}
+                            onChangeText={(text) => setFormData({ ...formData, email: text })}
+                            placeholder="Manager's email"
+                            error={errors.email}
+                            keyboardType="email-address"
+                            autoCapitalize="none"
+                        />
 
-                    <CustomTextInput
-                        label="Phone Number"
-                        value={formData.phone}
-                        onChangeText={(text) => setFormData({ ...formData, phone: text })}
-                        placeholder="Enter your phone number"
-                        error={errors.phone}
-                        keyboardType="phone-pad"
-                    />
+                        <CustomTextInput
+                            label="Password"
+                            value={formData.password}
+                            onChangeText={(text) => setFormData({ ...formData, password: text })}
+                            placeholder="Create password"
+                            error={errors.password}
+                            secureTextEntry
+                            autoCapitalize="none"
+                        />
 
-                    <CustomTextInput
-                        label="Password"
-                        value={formData.password}
-                        onChangeText={(text) => setFormData({ ...formData, password: text })}
-                        placeholder="Enter your password"
-                        error={errors.password}
-                        secureTextEntry
-                        autoCapitalize="none"
-                    />
+                        <CustomTextInput
+                            label="Confirm Password"
+                            value={formData.confirmPassword}
+                            onChangeText={(text) =>
+                                setFormData({ ...formData, confirmPassword: text })
+                            }
+                            placeholder="Re-enter password"
+                            error={errors.confirmPassword}
+                            secureTextEntry
+                            autoCapitalize="none"
+                        />
 
-                    <CustomTextInput
-                        label="Re-type Password"
-                        value={formData.confirmPassword}
-                        onChangeText={(text) =>
-                            setFormData({ ...formData, confirmPassword: text })
-                        }
-                        placeholder="Re-enter your password"
-                        error={errors.confirmPassword}
-                        secureTextEntry
-                        autoCapitalize="none"
-                    />
-                </View>
+                        <Text style={[styles.sectionHeader, { marginTop: 10 }]}>Location & Contact</Text>
+                        
+                        <CustomTextInput
+                            label="Full Address"
+                            value={formData.restaurantAddress}
+                            onChangeText={(text) => setFormData({ ...formData, restaurantAddress: text })}
+                            placeholder="Complete address"
+                            multiline
+                        />
+
+                        <CustomTextInput
+                            label="City"
+                            value={formData.city}
+                            onChangeText={(text) => setFormData({ ...formData, city: text })}
+                            placeholder="Enter city"
+                        />
+
+                        <CustomTextInput
+                            label="Contact Number"
+                            value={formData.restaurantPhone}
+                            onChangeText={(text) => setFormData({ ...formData, restaurantPhone: text })}
+                            placeholder="Restaurant phone line"
+                            keyboardType="phone-pad"
+                        />
+                    </View>
+                </ScrollView>
 
                 <View style={styles.buttonContainer}>
                     <CustomButton label="SIGN UP" onPress={handleSignUp} loading={loading} />
@@ -163,7 +180,16 @@ const styles = StyleSheet.create({
         marginTop: AuthTheme.spacing.md,
     },
     buttonContainer: {
-        marginTop: AuthTheme.spacing.xl,
+        marginTop: AuthTheme.spacing.md,
         paddingBottom: AuthTheme.spacing.lg,
+    },
+    sectionHeader: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: AuthTheme.colors.primary,
+        marginBottom: 15,
+        backgroundColor: '#F8F9FA',
+        padding: 8,
+        borderRadius: 5,
     },
 });
