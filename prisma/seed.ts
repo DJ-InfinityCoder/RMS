@@ -15,6 +15,7 @@ async function main() {
             latitude: 40.7128,
             longitude: -74.0060,
             phone: '555-0199',
+            upi_id: 'bharat030406@oksbi',
             is_active: true,
             qr_code: {
                 create: {

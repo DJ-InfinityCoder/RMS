@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   StyleSheet,
   TextInput,
   ScrollView,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { restaurants, searchByItemOrCategory, Restaurant } from '@/data/restaurants';
+import { restaurants, searchByItemOrCategory, Restaurant, getRestaurantsFromApi } from '@/data/restaurants';
 
 // ─── Category Quick Filters ──────────────────────────────────────────────────
 
@@ -25,25 +27,50 @@ const RECENT_KEYWORDS = ['Paneer', 'Pizza', 'Burger', 'Biryani'];
 
 export default function SearchScreen() {
   const [searchText, setSearchText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [restaurantsData, setRestaurantsData] = useState<Restaurant[]>(restaurants);
   const router = useRouter();
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      if (!refreshing) setLoading(true);
+      const data = await getRestaurantsFromApi();
+      setRestaurantsData(data);
+    } catch (error) {
+      console.error('Error in SearchScreen fetchData:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchData();
+  };
 
   // ─── Search with category matching ─────────────────────────────────────────
   const results = useMemo(() => {
     if (!searchText.trim()) return [];
-    return searchByItemOrCategory(searchText);
-  }, [searchText]);
+    return searchByItemOrCategory(searchText, restaurantsData);
+  }, [searchText, restaurantsData]);
 
   // ─── Matching menu items for detailed results ──────────────────────────────
   const matchingItems = useMemo(() => {
     if (!searchText.trim()) return [];
     const q = searchText.toLowerCase();
     const items: { restaurant: Restaurant; itemName: string; category: string; price: number; image: string }[] = [];
-    restaurants.forEach((r) => {
+    restaurantsData.forEach((r) => {
       r.menuItems.forEach((m) => {
         if (
           m.name.toLowerCase().includes(q) ||
           m.category.toLowerCase().includes(q) ||
-          m.ingredients.some((i) => i.toLowerCase().includes(q))
+          m.ingredients?.some((i) => i.toLowerCase().includes(q))
         ) {
           items.push({
             restaurant: r,
@@ -56,7 +83,7 @@ export default function SearchScreen() {
       });
     });
     return items;
-  }, [searchText]);
+  }, [searchText, restaurantsData]);
 
   const handleCategoryTap = (cat: string) => {
     setSearchText(cat);
@@ -112,7 +139,16 @@ export default function SearchScreen() {
         )}
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={{ paddingBottom: 40 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#FF7A00']} />
+        }
+      >
+        {loading && !refreshing && (
+          <ActivityIndicator size="large" color="#FF7A00" style={{ marginTop: 20 }} />
+        )}
         {!searchText.trim() ? (
           <>
             {/* Recent Keywords */}
@@ -148,7 +184,7 @@ export default function SearchScreen() {
             {/* Suggested Restaurants */}
             <Text style={styles.subTitle}>Popular Restaurants</Text>
             <FlatList
-              data={restaurants}
+              data={restaurantsData}
               keyExtractor={(item) => item.id}
               renderItem={renderRestaurant}
               scrollEnabled={false}

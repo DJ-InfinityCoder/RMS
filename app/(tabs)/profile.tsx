@@ -67,9 +67,8 @@ const ProfileRow: React.FC<RowProps> = ({
 
 export default function Profile() {
     const router = useRouter();
-    const { profile, preferences, loyalty, paymentMethods, updateProfile, canPayCash, logout } = useUser();
+    const { profile, preferences, loyalty, paymentMethods, updateProfile, canPayCash, logout, locationEnabled, setLocationEnabled, syncLocation } = useUser();
     const [notifications, setNotifications] = useState(true);
-    const [locationAccess, setLocationAccess] = useState(true);
 
     const handleLogout = async () => {
         Alert.alert(
@@ -207,8 +206,8 @@ export default function Profile() {
                         iconBg="#F0FDF4"
                         iconColor="#22C55E"
                         label="Saved Addresses"
-                        value={profile.address.split(',')[0]}
-                        onPress={() => router.push('/edit-profile' as any)}
+                        value={profile.address ? profile.address.split(',')[0] : 'Sync location'}
+                        onPress={() => syncLocation()}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -289,8 +288,11 @@ export default function Profile() {
                         iconColor="#16A34A"
                         label="Location Access"
                         toggle
-                        toggleValue={locationAccess}
-                        onToggle={setLocationAccess}
+                        toggleValue={locationEnabled}
+                        onToggle={(v) => {
+                            setLocationEnabled(v);
+                            if (v) syncLocation();
+                        }}
                     />
                     <View style={styles.separator} />
                     <ProfileRow

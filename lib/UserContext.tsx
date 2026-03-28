@@ -1,13 +1,16 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import * as Location from 'expo-location';
 import {
   getStoredUserId,
   getUserProfile,
   updateUserProfile as updateUserProfileAPI,
+  updateUserLocation as updateUserLocationAPI,
   getUserFoodPreferences,
   updateUserFoodPreferences,
   clearStoredSession,
 } from '@/api/userApi';
 import { UserProfile, UserFoodPreference } from '@/api/userApi';
+import { cleanupOldPayments } from '@/api/paymentApi';
 
 export interface UserProfileData {
   id?: string;
@@ -16,6 +19,8 @@ export interface UserProfileData {
   phone: string;
   avatar: string;
   address: string;
+  latitude?: number;
+  longitude?: number;
   memberSince: string;
 }
 
@@ -45,6 +50,7 @@ interface UserContextType {
   loyalty: LoyaltyInfo;
   loading: boolean;
   isLoggedIn: boolean;
+  locationEnabled: boolean;
   updateProfile: (updates: Partial<UserProfileData>) => Promise<void>;
   updatePreferences: (updates: Partial<UserPreferences>) => Promise<void>;
   addAllergy: (ingredient: string) => Promise<void>;
@@ -55,6 +61,8 @@ interface UserContextType {
   deductLoyaltyPoints: (pts: number) => void;
   canPayCash: () => boolean;
   refreshProfile: () => Promise<void>;
+  syncLocation: () => Promise<void>;
+  setLocationEnabled: (enabled: boolean) => void;
   logout: () => Promise<void>;
 }
 
@@ -85,6 +93,31 @@ const INITIAL_LOYALTY: LoyaltyInfo = {
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
+// ─── Reverse Geocoding ───────────────────────────────────────────────────────
+
+const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
+  try {
+    const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+    if (results && results.length > 0) {
+      const addr = results[0];
+      const parts = [
+        addr.name,
+        addr.street,
+        addr.district,
+        addr.city,
+        addr.region,
+        addr.postalCode,
+      ].filter(Boolean);
+      return parts.join(', ') || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+    }
+  } catch (error) {
+    console.error('Reverse geocoding error:', error);
+  }
+  return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+};
+
+// ─── Provider ────────────────────────────────────────────────────────────────
+
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [profile, setProfile] = useState<UserProfileData>(DEFAULT_PROFILE);
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
@@ -92,6 +125,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loyalty, setLoyalty] = useState<LoyaltyInfo>(INITIAL_LOYALTY);
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(true);
+
+  // ── Load User Data from API ──────────────────────────────────────────────
 
   const loadUserData = useCallback(async () => {
     setLoading(true);
@@ -110,7 +146,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: userProfile.full_name || 'Guest',
           email: userProfile.email || '',
           phone: userProfile.phone || '',
-          address: '',
+          address: userProfile.address || '',
+          latitude: userProfile.latitude,
+          longitude: userProfile.longitude,
           avatar: 'https://i.pravatar.cc/150?img=12',
           memberSince: '',
         });
@@ -127,6 +165,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }));
 
       setIsLoggedIn(true);
+
+      // Cleanup old payments (> 15 days) on login
+      cleanupOldPayments().catch(() => {});
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {
@@ -138,18 +179,68 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUserData();
   }, [loadUserData]);
 
+  // ── Auto-sync location on login if enabled ────────────────────────────────
+
+  const syncLocation = useCallback(async () => {
+    if (!profile.id || !locationEnabled) return;
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Location permission denied');
+        setLocationEnabled(false);
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = location.coords;
+
+      // Reverse geocode to get readable address
+      const address = await reverseGeocode(latitude, longitude);
+
+      // Update profile in DB
+      const updated = await updateUserLocationAPI(profile.id, latitude, longitude, address);
+
+      if (updated) {
+        setProfile((prev) => ({
+          ...prev,
+          address,
+          latitude,
+          longitude,
+        }));
+      }
+    } catch (error) {
+      console.error('Location sync error:', error);
+    }
+  }, [profile.id, locationEnabled]);
+
+  // Sync location when user logs in and location is enabled
+  useEffect(() => {
+    if (isLoggedIn && locationEnabled && profile.id) {
+      syncLocation();
+    }
+  }, [isLoggedIn, locationEnabled, profile.id, syncLocation]);
+
   const refreshProfile = useCallback(async () => {
     await loadUserData();
   }, [loadUserData]);
+
+  // ── Profile Update (globally synced via API) ──────────────────────────────
 
   const updateProfile = useCallback(async (updates: Partial<UserProfileData>) => {
     if (!profile.id) return;
 
     try {
-      const apiUpdates: Partial<{ full_name: string; email: string; phone: string }> = {};
+      const apiUpdates: Partial<{ full_name: string; email: string; phone: string; address: string; latitude: number; longitude: number }> = {};
       if (updates.name) apiUpdates.full_name = updates.name;
       if (updates.email) apiUpdates.email = updates.email;
       if (updates.phone) apiUpdates.phone = updates.phone;
+      if (updates.address) apiUpdates.address = updates.address;
+      if (updates.latitude !== undefined) apiUpdates.latitude = updates.latitude;
+      if (updates.longitude !== undefined) apiUpdates.longitude = updates.longitude;
 
       const updated = await updateUserProfileAPI(profile.id, apiUpdates);
       if (updated) {
@@ -158,6 +249,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           name: updated.full_name || prev.name,
           email: updated.email || prev.email,
           phone: updated.phone || prev.phone,
+          address: updated.address || prev.address,
+          latitude: updated.latitude ?? prev.latitude,
+          longitude: updated.longitude ?? prev.longitude,
         }));
       }
     } catch (error) {
@@ -247,6 +341,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         loyalty,
         loading,
         isLoggedIn,
+        locationEnabled,
         updateProfile,
         updatePreferences,
         addAllergy,
@@ -257,6 +352,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deductLoyaltyPoints,
         canPayCash,
         refreshProfile,
+        syncLocation,
+        setLocationEnabled,
         logout,
       }}
     >

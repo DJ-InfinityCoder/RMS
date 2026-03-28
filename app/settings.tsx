@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useUser } from '@/lib/UserContext';
+import Toast from '@/components/Toast';
 
 // ─── Allergy Options ─────────────────────────────────────────────────────────
 
@@ -28,6 +29,17 @@ export default function SettingsScreen() {
     const [selectedDietary, setSelectedDietary] = useState(preferences.dietary);
     const [selectedSpice, setSelectedSpice] = useState(preferences.spiceLevel);
     const [selectedCuisines, setSelectedCuisines] = useState<string[]>(preferences.favouriteCuisines);
+
+    // Toast state
+    const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+        visible: false,
+        message: '',
+        type: 'success',
+    });
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+        setToast({ visible: true, message, type });
+    };
 
     // ─── Toggle Allergy ──────────────────────────────────────────────────────
     const toggleAllergy = (allergy: string) => {
@@ -54,8 +66,8 @@ export default function SettingsScreen() {
             spiceLevel: selectedSpice,
             favouriteCuisines: selectedCuisines,
         });
-        Alert.alert('Saved!', 'Your preferences have been updated.');
-        router.back();
+        showToast('Your preferences have been updated.', 'success');
+        setTimeout(() => router.back(), 1200);
     };
 
     const handleAddPayment = () => {
@@ -72,7 +84,7 @@ export default function SettingsScreen() {
                             label: 'UPI - New Account',
                             isDefault: false,
                         });
-                        Alert.alert('Added', 'UPI payment method added');
+                        showToast('UPI payment method added', 'success');
                     },
                 },
                 {
@@ -84,7 +96,7 @@ export default function SettingsScreen() {
                             label: 'Card ****5678',
                             isDefault: false,
                         });
-                        Alert.alert('Added', 'Card payment method added');
+                        showToast('Card payment method added', 'success');
                     },
                 },
                 { text: 'Cancel', style: 'cancel' },
@@ -243,6 +255,13 @@ export default function SettingsScreen() {
                     <Text style={styles.saveBtnText}>Save Preferences</Text>
                 </TouchableOpacity>
             </ScrollView>
+
+            <Toast 
+                visible={toast.visible} 
+                message={toast.message} 
+                type={toast.type} 
+                onHide={() => setToast(prev => ({ ...prev, visible: false }))} 
+            />
         </SafeAreaView>
     );
 }

@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useUser } from '@/lib/UserContext';
+import Toast from '@/components/Toast';
 
 const DIETARY_OPTIONS = ['Veg', 'Non-Veg', 'Vegan', 'Any'];
 const SPICE_LEVELS = ['Mild', 'Medium', 'Spicy'];
@@ -27,6 +28,17 @@ export default function EditProfileScreen() {
 
     const [activeTab, setActiveTab] = useState<'profile' | 'preferences'>('profile');
     const [saving, setSaving] = useState(false);
+
+    // Toast state
+    const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
+        visible: false,
+        message: '',
+        type: 'success',
+    });
+
+    const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+        setToast({ visible: true, message, type });
+    };
 
     // Profile state
     const [name, setName] = useState(profile.name);
@@ -70,11 +82,10 @@ export default function EditProfileScreen() {
                 phone: phone.trim(),
                 address: address.trim(),
             });
-            Alert.alert('Success', 'Profile updated successfully!', [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+            showToast('Profile updated successfully!', 'success');
+            setTimeout(() => router.back(), 1500);
         } catch (error: any) {
-            Alert.alert('Error', error.message || 'Failed to update profile');
+            showToast(error.message || 'Failed to update profile', 'error');
         } finally {
             setSaving(false);
         }
@@ -89,11 +100,10 @@ export default function EditProfileScreen() {
                 favouriteCuisines: selectedCuisines,
                 allergies,
             });
-            Alert.alert('Success', 'Preferences updated successfully!', [
-                { text: 'OK', onPress: () => router.back() }
-            ]);
+            showToast('Preferences updated successfully!', 'success');
+            setTimeout(() => router.back(), 1500);
         } catch (error: any) {
-            Alert.alert('Error', error.message || 'Failed to update preferences');
+            showToast(error.message || 'Failed to update preferences', 'error');
         } finally {
             setSaving(false);
         }
@@ -402,6 +412,12 @@ export default function EditProfileScreen() {
                     )}
                 </ScrollView>
             </KeyboardAvoidingView>
+            <Toast 
+                visible={toast.visible} 
+                message={toast.message} 
+                type={toast.type} 
+                onHide={() => setToast(prev => ({ ...prev, visible: false }))} 
+            />
         </SafeAreaView>
     );
 }

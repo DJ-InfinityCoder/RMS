@@ -17,8 +17,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { parseQRValue } from '@/lib/restaurantQR';
-import { restaurants } from '@/data/restaurants';
 import { setSelectedRestaurant } from '@/lib/selectedRestaurant';
+import { restaurants, getRestaurantsFromApi } from '@/data/restaurants';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -39,12 +39,16 @@ const COLORS = {
   overlay: 'rgba(0,0,0,0.55)',
 };
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function ScannerScreen() {
   const router = useRouter();
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
+
+  useEffect(() => {
+    if (restaurants.length === 0) {
+      getRestaurantsFromApi();
+    }
+  }, []);
 
   // State
   const [isScanning, setIsScanning] = useState(true);
@@ -118,8 +122,6 @@ export default function ScannerScreen() {
     if (!isScanning) return;
 
     const restaurantId = parseQRValue(data);
-    console.log("Scanned QR Data:", data);
-    console.log("Parsed Restaurant ID:", restaurantId);
 
     if (!restaurantId) {
       setIsScanning(false);

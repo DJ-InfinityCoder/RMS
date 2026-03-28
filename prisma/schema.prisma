@@ -23,6 +23,7 @@ model User {
   orders        Order[]
   reviews       Review[]
   preferences   UserFoodPreference[]
+  payments      Payment[]
 
   @@index([email])
   @@map("users")
@@ -51,6 +52,7 @@ model Restaurant {
   longitude     Decimal?          @db.Decimal(9, 6)
   phone         String?           @db.VarChar(15)
   image_url     String?
+  upi_id        String?           @db.VarChar(100)
   is_active     Boolean           @default(true)
   created_at    DateTime          @default(now())
   dishes        Dish[]
@@ -150,6 +152,7 @@ model Order {
   status         OrderStatus? @default(PENDING)
   created_at     DateTime     @default(now())
   order_items    OrderItem[]
+  payment        Payment?
   restaurant     Restaurant?  @relation(fields: [restaurant_id], references: [id])
   user           User?        @relation(fields: [user_id], references: [id])
 
@@ -200,6 +203,38 @@ enum OrderStatus {
   READY
   CANCELLED
   COMPLETED
+}
+
+enum PaymentStatus {
+  INITIATED
+  VERIFIED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  CASH
+}
+
+model Payment {
+  id              String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id        String        @unique @db.Uuid
+  user_id         String        @db.Uuid
+  transaction_id  String?       @db.VarChar(100)
+  amount          Decimal       @db.Decimal(10, 2)
+  status          PaymentStatus @default(INITIATED)
+  method          PaymentMethod @default(UPI)
+  upi_id_used     String?       @db.VarChar(100)
+  verified_at     DateTime?
+  created_at      DateTime      @default(now())
+  order           Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  user            User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([created_at])
+  @@map("payments")
 }
 
 model Vendor {

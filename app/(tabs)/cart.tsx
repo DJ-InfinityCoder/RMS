@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCart, RestaurantCart } from '@/lib/CartContext';
 import { createMultipleTakeawayOrders } from '@/api/orderApi';
 import { notifyOrderStatus } from '@/utils/notifications';
-import { openUPIPayment } from '@/lib/upiPayment';
+import { initiateSecureUPIPayment, confirmPaymentOnServer, cancelPayment } from '@/lib/upiPayment';
 
 const generateTimeSlots = (): string[] => {
   return [
@@ -74,52 +74,82 @@ export default function CartPage() {
 
     setLoading(true);
     try {
-      // 1. Open UPI Payment App
       const amount = getTotalForRestaurant(group);
-      const paid = await openUPIPayment(amount, group.restaurantName);
-      
-      if (!paid) {
+
+      // Step 1: Create order on server first (PENDING status)
+      const orders = await createMultipleTakeawayOrders([group]);
+      const orderId = orders[0]?.id;
+
+      if (!orderId) {
+        throw new Error('Failed to create order');
+      }
+
+      // Step 2: Initiate secure payment (auth + server record + open UPI)
+      const paymentResult = await initiateSecureUPIPayment(
+        amount,
+        group.restaurantId,
+        group.restaurantName,
+        orderId
+      );
+
+      if (!paymentResult.success || !paymentResult.paymentId) {
         setLoading(false);
         return;
       }
 
-      // Show manual confirmation because Linking.openURL is one-way
+      // Step 3: Ask user to confirm they completed payment in UPI app
       Alert.alert(
         'Payment Confirmation',
         'Did you successfully complete the payment in the UPI app?',
         [
-          { 
-            text: 'No', 
-            onPress: () => setLoading(false),
-            style: 'cancel' 
+          {
+            text: 'No, Cancel',
+            onPress: async () => {
+              await cancelPayment(paymentResult.paymentId!);
+              setLoading(false);
+            },
+            style: 'cancel',
           },
           {
-            text: 'Yes, Place Order',
+            text: 'Yes, I Paid',
             onPress: async () => {
-              // 3. Logic for single restaurant checkout after payment
-              const orderItems = group.items.map(item => ({
-                dish_id: item.id,
-                quantity: item.qty
-              }));
+              try {
+                // Step 4: Verify payment on server (anti-fraud gate)
+                const verified = await confirmPaymentOnServer(
+                  paymentResult.paymentId!,
+                  paymentResult.transactionId!
+                );
 
-              await createMultipleTakeawayOrders([group]);
-              
-              await notifyOrderStatus('CONFIRMED', `order-${Date.now()}`, group.restaurantName);
+                if (!verified) {
+                  Alert.alert(
+                    'Verification Failed',
+                    'Payment could not be verified. If you were charged, contact support with order ID: ' + orderId
+                  );
+                  setLoading(false);
+                  return;
+                }
 
-              Alert.alert('Success', `Order placed for ${group.restaurantName}!`, [
-                {
-                  text: 'View Orders',
-                  onPress: () => {
-                    clearRestaurantItems(group.restaurantId);
-                    if (restaurantGroups.length === 1) {
-                      router.push('/(tabs)/orders' as any);
-                    }
+                // Step 5: Only after server verification → mark order confirmed
+                await notifyOrderStatus('CONFIRMED', orderId, group.restaurantName);
+
+                Alert.alert('Success', `Order placed & payment verified for ${group.restaurantName}!`, [
+                  {
+                    text: 'View Orders',
+                    onPress: () => {
+                      clearRestaurantItems(group.restaurantId);
+                      if (restaurantGroups.length === 1) {
+                        router.push('/(tabs)/orders' as any);
+                      }
+                    },
                   },
-                },
-              ]);
-              setLoading(false);
-            }
-          }
+                ]);
+              } catch (e: any) {
+                Alert.alert('Error', e.message || 'Verification failed');
+              } finally {
+                setLoading(false);
+              }
+            },
+          },
         ]
       );
     } catch (error: any) {

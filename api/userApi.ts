@@ -8,6 +8,9 @@ export interface UserProfile {
   full_name: string;
   email: string;
   phone?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface UserFoodPreference {
@@ -34,7 +37,7 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, full_name, email, phone')
+      .select('id, full_name, email, phone, address, latitude, longitude')
       .eq('id', userId)
       .single();
 
@@ -48,14 +51,14 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
 
 export const updateUserProfile = async (
   userId: string,
-  updates: Partial<{ full_name: string; email: string; phone: string }>
+  updates: Partial<{ full_name: string; email: string; phone: string; address: string; latitude: number; longitude: number }>
 ): Promise<UserProfile | null> => {
   try {
     const { data, error } = await supabase
       .from('users')
       .update({ ...updates })
       .eq('id', userId)
-      .select('id, full_name, email, phone')
+      .select('id, full_name, email, phone, address, latitude, longitude')
       .single();
 
     if (error) throw error;
@@ -63,6 +66,31 @@ export const updateUserProfile = async (
   } catch (error) {
     console.error('Error updating user profile:', error);
     throw error;
+  }
+};
+
+/**
+ * Update user's location (lat/long) and reverse-geocoded address.
+ */
+export const updateUserLocation = async (
+  userId: string,
+  latitude: number,
+  longitude: number,
+  address: string
+): Promise<UserProfile | null> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ latitude, longitude, address })
+      .eq('id', userId)
+      .select('id, full_name, email, phone, address, latitude, longitude')
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating user location:', error);
+    return null;
   }
 };
 

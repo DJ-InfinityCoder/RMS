@@ -16,9 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import useUserLocation from '@/hooks/useUserLocation';
+// Removed: import useUserLocation from '@/hooks/useUserLocation';
 import { getRestaurants, DBRestaurant, getTrendingDishes, getOffers, DBMenuItem } from '@/api/restaurantApi';
-import { getCurrentUser } from '@/api/authApi';
+import { useUser } from '@/lib/UserContext';
 import { useCart } from '@/lib/CartContext';
 import Skeleton from '@/components/ui/Skeleton';
 
@@ -35,20 +35,18 @@ const QUICK_CATEGORIES = [
 ];
 
 export default function HomeScreen() {
-  const region = useUserLocation();
   const router = useRouter();
+  const { profile, syncLocation, loading: userLoading } = useUser();
   const { items } = useCart();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [restaurants, setRestaurants] = useState<DBRestaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [userName, setUserName] = useState('Guest');
   const [trendingDishes, setTrendingDishes] = useState<DBMenuItem[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
 
   useEffect(() => {
     fetchData();
-    fetchUser();
   }, []);
 
   const cartItemCount = useMemo(() => {
@@ -82,16 +80,10 @@ export default function HomeScreen() {
     }
   };
 
-  const fetchUser = async () => {
-    const user = await getCurrentUser();
-    if (user?.full_name) {
-      setUserName(user.full_name.split(' ')[0]);
-    }
-  };
-
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
+    syncLocation();
   };
 
   // ─── Time-based Greeting ───────────────────────────────────────────────────
@@ -106,9 +98,7 @@ export default function HomeScreen() {
 
   // ─── Category filter ───────────────────────────────────────────────────────
   const filteredRestaurants = useMemo(() => {
-    if (!region) return [];
-    
-    // nearby calculation can be added here if needed
+    // We use restaurants even if coordinates aren't synced yet
     const nearby = restaurants;
 
     if (selectedCategory === "All") return nearby;
@@ -116,7 +106,7 @@ export default function HomeScreen() {
     return nearby.filter((res) =>
       res.cuisine.some((c) => c.toLowerCase().includes(selectedCategory.toLowerCase()))
     );
-  }, [region, selectedCategory, restaurants]);
+  }, [selectedCategory, restaurants]);
 
   const renderCategory = ({ item }: { item: (typeof QUICK_CATEGORIES)[0] }) => (
     <TouchableOpacity
@@ -227,7 +217,7 @@ export default function HomeScreen() {
   );
 };
 
-  if (!region || loading) {
+  if (userLoading || loading) {
     return (
       <SafeAreaView style={styles.container as any}>
         <View style={styles.headerRow as any}>
@@ -275,9 +265,14 @@ export default function HomeScreen() {
       >
         {/* ─── Clean Minimal Header ──────────────────────────────────────── */}
         <View style={styles.headerRow as any}>
-          <View>
-            <Text style={styles.greetingSmall as any}>Hey {userName},</Text>
-            <Text style={styles.greetingBold as any}>{greeting}! 👋</Text>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 , marginTop: 10 }}>
+                <Ionicons name="location" size={14} color="#FF7A00" />
+                <Text style={styles.greetingSmall as any} numberOfLines={1}>
+                    {profile.address || 'Address not synced'}
+                </Text>
+            </View>
+            <Text style={styles.greetingBold as any}>{greeting}, {profile.name.split(' ')[0]}! 👋</Text>
           </View>
           <View style={styles.headerActions as any}>
             <TouchableOpacity
@@ -432,7 +427,7 @@ export default function HomeScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderRestaurant}
           scrollEnabled={false}
-          contentContainerStyle={{ paddingBottom: 100, marginTop: 16 }}
+          contentContainerStyle={{ marginTop: 16 }}
           ListEmptyComponent={
             <View style={styles.emptyState as any}>
               <MaterialCommunityIcons
@@ -456,6 +451,34 @@ export default function HomeScreen() {
             </View>
           }
         />
+
+        {/* ─── Footer ────────────────────────────────────────────────────── */}
+        <View style={styles.footer as any}>
+            <View style={styles.footerTop as any}>
+                <View>
+                    <Text style={styles.footerBrand as any}>RMS</Text>
+                    <Text style={styles.footerTagline as any}>Manage your orders and Table Booking</Text>
+                </View>
+            </View>
+            
+            <View style={styles.footerDivider as any} />
+            
+            <View style={styles.footerBottom as any}>
+                <Text style={styles.footerCopyright as any}>© 2026 RMS. All rights reserved.</Text>
+                <View style={styles.footerSocials as any}>
+                    <TouchableOpacity style={styles.socialIcon as any}>
+                        <Ionicons name="logo-instagram" size={18} color="#A0A5BA" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.socialIcon as any}>
+                        <Ionicons name="logo-twitter" size={18} color="#A0A5BA" />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.socialIcon as any}>
+                        <Ionicons name="logo-facebook" size={18} color="#A0A5BA" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+            <Text style={styles.versionText as any}>Version 2.10.0 (Stable)</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -935,6 +958,11 @@ const styles = StyleSheet.create({
     marginTop: 6,
     textAlign: "center",
   },
+  retryBtnText: {
+    color: "#FFF",
+    fontWeight: "800",
+    fontSize: 15,
+  },
   retryBtn: {
     marginTop: 20,
     paddingHorizontal: 24,
@@ -942,9 +970,81 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF7A00",
     borderRadius: 14,
   },
-  retryBtnText: {
-    color: "#FFF",
-    fontWeight: "800",
-    fontSize: 15,
+
+  // ── Footer ──
+  footer: {
+    backgroundColor: '#F8F9FB',
+    padding: 30,
+    marginTop: 20,
+    marginBottom: 40,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: '#F0F5FA',
+    alignItems: 'center',
+  },
+  footerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 15,
+    marginBottom: 20,
+  },
+  footerLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 15,
+    backgroundColor: '#FFF',
+  },
+  footerBrand: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#181C2E',
+  },
+  footerTagline: {
+    fontSize: 12,
+    color: '#A0A5BA',
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  footerDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: '#EEF2F6',
+    marginBottom: 20,
+  },
+  footerBottom: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  footerCopyright: {
+    fontSize: 10,
+    color: '#A0A5BA',
+    fontWeight: '500',
+    flex: 1,
+  },
+  footerSocials: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  socialIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#FFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+  },
+  versionText: {
+    fontSize: 9,
+    color: '#D0D5DD',
+    marginTop: 20,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
 });
