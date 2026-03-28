@@ -14,6 +14,9 @@ export default function LoginScreen() {
         email: '',
         password: '',
     });
+    //here
+    const [role, setRole] = useState("restaurant");
+
     const [rememberMe, setRememberMe] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState(false);
@@ -34,37 +37,80 @@ export default function LoginScreen() {
     };
 
     const handleLogin = async () => {
+        // if (!validateForm()) return;
+
+        // setLoading(true);
+        // try {
+        //     const response = await fetch('/api/auth/login', {
+        //         method: 'POST',
+        //         headers: {
+        //             'Content-Type': 'application/json',
+        //         },
+        //         body: JSON.stringify({
+        //             email: formData.email,
+        //             password: formData.password,
+        //         }),
+        //     });
+
+        //     const result = await response.json();
+
+        //     if (!response.ok) {
+        //         setErrors({ email: result.error || 'Login failed' });
+        //         return;
+        //     }
+
+        //     console.log('Login successful:', result.user);
+        //     router.push('/(admin)' as any);
+        // } catch (error) {
+        //     console.error('Login error:', error);
+        //     setErrors({ email: 'An error occurred during login' });
+        // } finally {
+        //     setLoading(false);
+        // }
         if (!validateForm()) return;
 
-        setLoading(true);
-        try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    email: formData.email,
-                    password: formData.password,
-                }),
-            });
+    setLoading(true);
+    try {
+        // ✅ NEW: Dynamic endpoint selection
+        const endpoint = role === "vendor" ? "/api/vendor/login" : "/api/auth/login";
 
-            const result = await response.json();
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                email: formData.email,
+                password: formData.password,
+                // Optional: You can still send role here if the backend needs it
+            }),
+        });
 
-            if (!response.ok) {
-                setErrors({ email: result.error || 'Login failed' });
-                return;
-            }
+        const result = await response.json();
 
-            console.log('Login successful:', result.user);
-            router.push('/(admin)' as any);
-        } catch (error) {
-            console.error('Login error:', error);
-            setErrors({ email: 'An error occurred during login' });
-        } finally {
-            setLoading(false);
+        if (!response.ok) {
+            setErrors({ email: result.error || 'Login failed' });
+            return;
         }
+
+        console.log('Login successful:', result.user);
+
+        // ✅ NEW: Dynamic redirection based on role
+        if (role === "vendor") {
+            router.push('/vendor' as any);
+        } else {
+            router.push('/(admin)' as any);
+        }
+
+    } catch (error) {
+        console.error('Login error:', error);
+        setErrors({ email: 'An error occurred during login' });
+    } finally {
+        setLoading(false);
+    }
     };
+
+    
 
     const handleSocialLogin = (provider: string) => {
         console.log('Social login:', provider);
@@ -78,6 +124,31 @@ export default function LoginScreen() {
         >
             <View style={styles.content}>
                 <View style={styles.formContainer}>
+
+                {/* 3. Role Selection UI added above Email */}
+                    <View style={{ marginBottom: 20 }}>
+                        <Text style={styles.roleLabel}>Select Role</Text>
+                        <View style={{ flexDirection: "row", gap: 20, marginTop: 8 }}>
+                            <TouchableOpacity onPress={() => setRole("restaurant")}>
+                                <Text style={[
+                                    styles.roleOption, 
+                                    { color: role === "restaurant" ? AuthTheme.colors.primary : "#999" }
+                                ]}>
+                                    Restaurant
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity onPress={() => setRole("vendor")}>
+                                <Text style={[
+                                    styles.roleOption, 
+                                    { color: role === "vendor" ? AuthTheme.colors.primary : "#999" }
+                                ]}>
+                                    Vendor
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
                     <CustomTextInput
                         label="Email"
                         value={formData.email}

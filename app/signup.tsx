@@ -8,6 +8,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 export default function SignUpScreen() {
     const router = useRouter();
+    const [role, setRole] = useState("restaurant");
     const [formData, setFormData] = useState({
         email: '',
         password: '',
@@ -52,19 +53,31 @@ export default function SignUpScreen() {
 
         setLoading(true);
         try {
-            const response = await fetch('/api/auth/signup', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    name: formData.restaurantName,
-                    email: formData.email,
-                    password: formData.password,
-                    restaurantAddress: formData.restaurantAddress,
-                    city: formData.city,
-                    restaurantPhone: formData.restaurantPhone,
-                }),
+            // ✅ Determine endpoint based on role
+            const endpoint = role === "vendor" ? "/api/vendor/signup" : "/api/auth/signup";
+
+            const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            // ✅ Conditional body based on role
+            body: JSON.stringify(
+                role === "vendor"
+                    ? {
+                        name: formData.restaurantName,
+                        email: formData.email,
+                        mobile: formData.restaurantPhone, // Map phone to mobile for vendors
+                      }
+                    : {
+                        name: formData.restaurantName,
+                        email: formData.email,
+                        password: formData.password,
+                        restaurantAddress: formData.restaurantAddress,
+                        city: formData.city,
+                        restaurantPhone: formData.restaurantPhone,
+                      }
+            ),
             });
 
             const result = await response.json();
@@ -74,11 +87,8 @@ export default function SignUpScreen() {
                 return;
             }
 
-            console.log('Sign Up successful:', result.user);
-            // Redirect to login after successful signup
             router.push('/login' as any);
         } catch (error) {
-            console.error('Signup error:', error);
             setErrors({ email: 'An error occurred during signup' });
         } finally {
             setLoading(false);
@@ -94,6 +104,38 @@ export default function SignUpScreen() {
             <View style={styles.content}>
                 <ScrollView showsVerticalScrollIndicator={false}>
                     <View style={styles.formContainer}>
+                        {/* ✅ NEW: Role Selector (Same as Login) */}
+                        <View style={{ marginBottom: 20 }}>
+                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333' }}>Select Role</Text>
+                            <View style={{ flexDirection: "row", gap: 20, marginTop: 8 }}>
+                                <TouchableOpacity onPress={() => setRole("restaurant")}>
+                                    <Text style={{ 
+                                        fontSize: 16, 
+                                        fontWeight: 'bold', 
+                                        color: role === "restaurant" ? AuthTheme.colors.primary : "#999" 
+                                    }}>
+                                        RESTAURANT
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={() => setRole("vendor")}>
+                                    <Text style={{ 
+                                        fontSize: 16, 
+                                        fontWeight: 'bold', 
+                                        color: role === "vendor" ? AuthTheme.colors.primary : "#999" 
+                                    }}>
+                                        VENDOR
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                        {/* ✅ Dynamic Header */}
+                        <Text style={styles.sectionHeader}>
+                            {role === "vendor" ? "Vendor Account Details" : "Restaurant Account Details"}
+                        </Text>
+
+
                         <Text style={styles.sectionHeader}>Restaurant Account Details</Text>
                         
                         <CustomTextInput

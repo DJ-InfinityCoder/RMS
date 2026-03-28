@@ -1,7 +1,6 @@
 generator client {
   provider = "prisma-client-js"
-} 
-
+}
 
 datasource db {
   provider  = "postgresql"
@@ -15,12 +14,13 @@ model User {
   email         String               @unique @db.VarChar(150)
   phone         String?              @unique @db.VarChar(15)
   password_hash String
-  address       String?
   latitude      Decimal?             @db.Decimal(9, 6)
   longitude     Decimal?             @db.Decimal(9, 6)
+  address       String?
   created_at    DateTime             @default(now())
   updated_at    DateTime             @default(now())
   orders        Order[]
+  payments      payments[]
   reviews       Review[]
   preferences   UserFoodPreference[]
 
@@ -42,24 +42,25 @@ model UserFoodPreference {
 model Restaurant {
   id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name          String            @db.VarChar(150)
-  email         String            @unique @db.VarChar(150)
-  password_hash String
   description   String?
   address       String
   city          String?           @db.VarChar(100)
   latitude      Decimal?          @db.Decimal(9, 6)
   longitude     Decimal?          @db.Decimal(9, 6)
   phone         String?           @db.VarChar(15)
-  image_url     String?
   is_active     Boolean           @default(true)
   created_at    DateTime          @default(now())
+  email         String            @unique @db.VarChar(150)
+  password_hash String
+  cuisine       String[]          @default([])
+  image_url     String?
+  upi_id        String?           @db.VarChar(100)
   dishes        Dish[]
   offers        Offer[]
   orders        Order[]
-  reviews       Review[]
   qr_code       RestaurantQRCode?
+  reviews       Review[]
   table_slots   TableSlot[]
-  cuisine       String[]          @default([])
 
   @@index([latitude, longitude], map: "idx_restaurant_location")
   @@index([email])
@@ -98,8 +99,8 @@ model Dish {
   price           Decimal?         @db.Decimal(10, 2)
   recommended_for String?
   image_url       String?
-  category        String?          @db.VarChar(100)
   is_available    Boolean          @default(true)
+  category        String?          @db.VarChar(100)
   ingredients     DishIngredient[]
   restaurant      Restaurant       @relation(fields: [restaurant_id], references: [id], onDelete: Cascade)
   order_items     OrderItem[]
@@ -152,6 +153,7 @@ model Order {
   order_items    OrderItem[]
   restaurant     Restaurant?  @relation(fields: [restaurant_id], references: [id])
   user           User?        @relation(fields: [user_id], references: [id])
+  payments       payments?
 
   @@map("orders")
 }
@@ -168,38 +170,19 @@ model OrderItem {
 }
 
 model Review {
-  id           String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id      String?    @db.Uuid
-  dish_id      String?    @db.Uuid
-  restaurant_id String?   @db.Uuid
-  rating       Int?
-  comment      String?
-  avatar       String?
-  created_at   DateTime   @default(now())
-  dish         Dish?      @relation(fields: [dish_id], references: [id])
-  restaurant   Restaurant? @relation(fields: [restaurant_id], references: [id])
-  user         User?      @relation(fields: [user_id], references: [id])
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String?     @db.Uuid
+  dish_id       String?     @db.Uuid
+  rating        Int?
+  comment       String?
+  created_at    DateTime    @default(now())
+  avatar        String?
+  restaurant_id String?     @db.Uuid
+  dish          Dish?       @relation(fields: [dish_id], references: [id])
+  restaurant    Restaurant? @relation(fields: [restaurant_id], references: [id])
+  user          User?       @relation(fields: [user_id], references: [id])
 
   @@map("reviews")
-}
-
-enum UserRole {
-  CUSTOMER
-  RESTAURANT_ADMIN
-}
-
-enum DiningType {
-  DINE_IN
-  PICKUP
-}
-
-enum OrderStatus {
-  PENDING
-  CONFIRMED
-  PREPARING
-  READY
-  CANCELLED
-  COMPLETED
 }
 
 model Vendor {
@@ -216,4 +199,64 @@ model Vendor {
 
   @@index([name])
   @@map("vendors")
+}
+
+model payments {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  order_id       String        @unique @db.Uuid
+  user_id        String        @db.Uuid
+  transaction_id String?       @db.VarChar(100)
+  amount         Decimal       @db.Decimal(10, 2)
+  status         PaymentStatus @default(INITIATED)
+  method         PaymentMethod @default(UPI)
+  upi_id_used    String?       @db.VarChar(100)
+  verified_at    DateTime?
+  created_at     DateTime      @default(now())
+  orders         Order         @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  users          User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([created_at])
+  @@index([user_id])
+}
+
+model VendorAdmin {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name       String
+  email      String   @unique
+  mobile     String   @unique
+  created_at DateTime @default(now())
+
+  @@map("vendor_admin")
+}
+
+enum UserRole {
+  CUSTOMER
+  RESTAURANT_ADMIN
+}
+
+enum DiningType {
+  DINE_IN
+  PICKUP
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  PREPARING
+  READY
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  CASH
+}
+
+enum PaymentStatus {
+  INITIATED
+  VERIFIED
+  FAILED
+  REFUNDED
 }
