@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Checkbox } from 'react-native-paper';
+import * as SecureStore from 'expo-secure-store';
+
 
 export default function LoginScreen() {
     const router = useRouter();
@@ -97,10 +99,13 @@ export default function LoginScreen() {
 
         // ✅ NEW: Dynamic redirection based on role
         if (role === "vendor") {
+            await SecureStore.setItemAsync('vendorEmail', result.user.email);
+            await SecureStore.setItemAsync('vendorName', result.user.name);
             router.push('/vendor' as any);
         } else {
             router.push('/(admin)' as any);
         }
+
 
     } catch (error) {
         console.error('Login error:', error);
@@ -122,104 +127,113 @@ export default function LoginScreen() {
             subtitle="Please sign in to your existing account"
             headerHeight={25}
         >
-            <View style={styles.content}>
-                <View style={styles.formContainer}>
-
-                {/* 3. Role Selection UI added above Email */}
-                    <View style={{ marginBottom: 20 }}>
-                        <Text style={styles.roleLabel}>Select Role</Text>
-                        <View style={{ flexDirection: "row", gap: 20, marginTop: 8 }}>
-                            <TouchableOpacity onPress={() => setRole("restaurant")}>
-                                <Text style={[
-                                    styles.roleOption, 
-                                    { color: role === "restaurant" ? AuthTheme.colors.primary : "#999" }
-                                ]}>
-                                    Restaurant
-                                </Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity onPress={() => setRole("vendor")}>
-                                <Text style={[
-                                    styles.roleOption, 
-                                    { color: role === "vendor" ? AuthTheme.colors.primary : "#999" }
-                                ]}>
-                                    Vendor
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    <CustomTextInput
-                        label="Email"
-                        value={formData.email}
-                        onChangeText={(text) => setFormData({ ...formData, email: text })}
-                        placeholder="Enter your email"
-                        error={errors.email}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                    />
-
-                    <CustomTextInput
-                        label="Password"
-                        value={formData.password}
-                        onChangeText={(text) => setFormData({ ...formData, password: text })}
-                        placeholder="Enter your password"
-                        error={errors.password}
-                        secureTextEntry
-                        autoCapitalize="none"
-                    />
-
-                    <View style={styles.optionsRow}>
-                        <View style={styles.checkboxContainer}>
-                            <Checkbox
-                                status={rememberMe ? 'checked' : 'unchecked'}
-                                onPress={() => setRememberMe(!rememberMe)}
-                                color={AuthTheme.colors.primary}
+            <View style={styles.formContainer}>
+                {/* Role Selector */}
+                <View style={styles.roleSelectorWrapper}>
+                    <Text style={styles.roleTitle}>Sign In As</Text>
+                    <View style={styles.roleContainer}>
+                        <TouchableOpacity 
+                            onPress={() => setRole("restaurant")}
+                            style={[styles.roleLabelWrapper, role === "restaurant" && styles.activeRoleWrapper]}
+                        >
+                            <Ionicons 
+                                name="restaurant-outline" 
+                                size={20} 
+                                color={role === "restaurant" ? AuthTheme.colors.primary : "#999"} 
                             />
-                            <Text style={styles.checkboxLabel}>Remember me</Text>
-                        </View>
-
-                        <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
-                            <Text style={styles.forgotPassword}>Forgot Password</Text>
-                        </TouchableOpacity>
-                    </View>
-
-                    <View style={styles.buttonContainer}>
-                        <CustomButton label="LOG IN" onPress={handleLogin} loading={loading} />
-                    </View>
-
-                    <View style={styles.dividerContainer}>
-                        <View style={styles.divider} />
-                        <Text style={styles.dividerText}>Or</Text>
-                        <View style={styles.divider} />
-                    </View>
-
-                    <View style={styles.socialContainer}>
-                        <TouchableOpacity
-                            style={[styles.socialButton, { backgroundColor: AuthTheme.colors.facebook }]}
-                            onPress={() => handleSocialLogin('facebook')}
-                        >
-                            <Ionicons name="logo-facebook" size={24} color="white" />
+                            <Text style={[styles.roleLabel, role === "restaurant" && styles.activeRoleText]}>
+                                RESTAURANT
+                            </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.socialButton, { backgroundColor: AuthTheme.colors.twitter }]}
-                            onPress={() => handleSocialLogin('twitter')}
+                        <TouchableOpacity 
+                            onPress={() => setRole("vendor")}
+                            style={[styles.roleLabelWrapper, role === "vendor" && styles.activeRoleWrapper]}
                         >
-                            <Ionicons name="logo-twitter" size={24} color="white" />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            style={[styles.socialButton, { backgroundColor: AuthTheme.colors.apple }]}
-                            onPress={() => handleSocialLogin('apple')}
-                        >
-                            <Ionicons name="logo-apple" size={24} color="white" />
+                            <Ionicons 
+                                name="business-outline" 
+                                size={20} 
+                                color={role === "vendor" ? AuthTheme.colors.primary : "#999"} 
+                            />
+                            <Text style={[styles.roleLabel, role === "vendor" && styles.activeRoleText]}>
+                                VENDOR
+                            </Text>
                         </TouchableOpacity>
                     </View>
                 </View>
 
+                <CustomTextInput
+                    label="Email Address"
+                    value={formData.email}
+                    onChangeText={(text) => setFormData({ ...formData, email: text })}
+                    placeholder="Enter your email"
+                    error={errors.email}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    leftIcon={<Ionicons name="mail-outline" size={20} color="#666" />}
+                />
+
+                <CustomTextInput
+                    label="Password"
+                    value={formData.password}
+                    onChangeText={(text) => setFormData({ ...formData, password: text })}
+                    placeholder="Enter your password"
+                    error={errors.password}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#666" />}
+                />
+
+                <View style={styles.optionsRow}>
+                    <View style={styles.checkboxContainer}>
+                        <Checkbox
+                            status={rememberMe ? 'checked' : 'unchecked'}
+                            onPress={() => setRememberMe(!rememberMe)}
+                            color={AuthTheme.colors.primary}
+                        />
+                        <Text style={styles.checkboxLabel}>Remember me</Text>
+                    </View>
+
+                    <TouchableOpacity onPress={() => router.push('/forgot-password' as any)}>
+                        <Text style={styles.forgotPassword}>Forgot Password?</Text>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.buttonContainer}>
+                    <CustomButton label="LOG IN" onPress={handleLogin} loading={loading} />
+                </View>
+
+                <View style={styles.dividerContainer}>
+                    <View style={styles.divider} />
+                    <Text style={styles.dividerText}>Or</Text>
+                    <View style={styles.divider} />
+                </View>
+
+                <View style={styles.socialContainer}>
+                    <TouchableOpacity
+                        style={[styles.socialButton, { backgroundColor: '#F5F5F5' }]}
+                        onPress={() => handleSocialLogin('google')}
+                    >
+                        <Ionicons name="logo-google" size={24} color="#DB4437" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.socialButton, { backgroundColor: AuthTheme.colors.facebook }]}
+                        onPress={() => handleSocialLogin('facebook')}
+                    >
+                        <Ionicons name="logo-facebook" size={24} color="white" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.socialButton, { backgroundColor: AuthTheme.colors.apple }]}
+                        onPress={() => handleSocialLogin('apple')}
+                    >
+                        <Ionicons name="logo-apple" size={24} color="white" />
+                    </TouchableOpacity>
+                </View>
+
                 <View style={styles.footer}>
-                    <Text style={styles.footerText}>Don&apos;t have an account? </Text>
+                    <Text style={styles.footerText}>Don't have an account? </Text>
                     <TouchableOpacity onPress={() => router.push('/signup' as any)}>
                         <Text style={styles.signUpLink}>SIGN UP</Text>
                     </TouchableOpacity>
@@ -232,11 +246,51 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     content: {
         flex: 1,
-        justifyContent: 'space-between',
     },
     formContainer: {
         marginTop: AuthTheme.spacing.md,
+        paddingBottom: 20,
     },
+    roleSelectorWrapper: {
+        marginBottom: 24,
+    },
+    roleTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#444',
+        marginBottom: 12,
+        letterSpacing: 0.5,
+    },
+    roleContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    roleLabelWrapper: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: '#F5F6F7',
+        borderWidth: 1,
+        borderColor: '#EEE',
+        gap: 8,
+    },
+    activeRoleWrapper: {
+        backgroundColor: '#FFF1E8',
+        borderColor: AuthTheme.colors.primary,
+        borderWidth: 1.5,
+    },
+    roleLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#888',
+    },
+    activeRoleText: {
+        color: AuthTheme.colors.primary,
+    },
+
     optionsRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',

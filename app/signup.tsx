@@ -5,6 +5,8 @@ import { AuthTheme } from '@/constants/AuthTheme';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
 
 export default function SignUpScreen() {
     const router = useRouter();
@@ -101,83 +103,90 @@ export default function SignUpScreen() {
             subtitle="Create an account and set up your restaurant"
             headerHeight={25}
         >
-            <View style={styles.content}>
-                <ScrollView showsVerticalScrollIndicator={false}>
-                    <View style={styles.formContainer}>
-                        {/* ✅ NEW: Role Selector (Same as Login) */}
-                        <View style={{ marginBottom: 20 }}>
-                            <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#333' }}>Select Role</Text>
-                            <View style={{ flexDirection: "row", gap: 20, marginTop: 8 }}>
-                                <TouchableOpacity onPress={() => setRole("restaurant")}>
-                                    <Text style={{ 
-                                        fontSize: 16, 
-                                        fontWeight: 'bold', 
-                                        color: role === "restaurant" ? AuthTheme.colors.primary : "#999" 
-                                    }}>
-                                        RESTAURANT
-                                    </Text>
-                                </TouchableOpacity>
+            <View style={styles.formContainer}>
+                {/* Role Selector */}
+                <View style={styles.roleSelectorWrapper}>
+                    <Text style={styles.roleTitle}>Create Account As</Text>
+                    <View style={styles.roleContainer}>
+                        <TouchableOpacity 
+                            onPress={() => setRole("restaurant")}
+                            style={[styles.roleLabelWrapper, role === "restaurant" && styles.activeRoleWrapper]}
+                        >
+                            <Ionicons 
+                                name="restaurant-outline" 
+                                size={20} 
+                                color={role === "restaurant" ? AuthTheme.colors.primary : "#999"} 
+                            />
+                            <Text style={[styles.roleLabel, role === "restaurant" && styles.activeRoleText]}>
+                                RESTAURANT
+                            </Text>
+                        </TouchableOpacity>
 
-                                <TouchableOpacity onPress={() => setRole("vendor")}>
-                                    <Text style={{ 
-                                        fontSize: 16, 
-                                        fontWeight: 'bold', 
-                                        color: role === "vendor" ? AuthTheme.colors.primary : "#999" 
-                                    }}>
-                                        VENDOR
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
-                        </View>
+                        <TouchableOpacity 
+                            onPress={() => setRole("vendor")}
+                            style={[styles.roleLabelWrapper, role === "vendor" && styles.activeRoleWrapper]}
+                        >
+                            <Ionicons 
+                                name="business-outline" 
+                                size={20} 
+                                color={role === "vendor" ? AuthTheme.colors.primary : "#999"} 
+                            />
+                            <Text style={[styles.roleLabel, role === "vendor" && styles.activeRoleText]}>
+                                VENDOR
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
 
-                        {/* ✅ Dynamic Header */}
-                        <Text style={styles.sectionHeader}>
-                            {role === "vendor" ? "Vendor Account Details" : "Restaurant Account Details"}
-                        </Text>
+                {/* Dynamic Title */}
+                <Text style={styles.sectionHeader}>
+                    {role === "vendor" ? "Vendor Details" : "Restaurant Details"}
+                </Text>
 
+                <CustomTextInput
+                    label={role === "vendor" ? "Vendor Name" : "Restaurant Name"}
+                    value={formData.restaurantName}
+                    onChangeText={(text) => setFormData({ ...formData, restaurantName: text })}
+                    placeholder={role === "vendor" ? "e.g. Fresh Veggie Co" : "e.g. The Spicy Bistro"}
+                    error={errors.restaurantName}
+                    leftIcon={<Ionicons name="person-outline" size={20} color="#666" />}
+                />
 
-                        <Text style={styles.sectionHeader}>Restaurant Account Details</Text>
-                        
-                        <CustomTextInput
-                            label="Restaurant Name"
-                            value={formData.restaurantName}
-                            onChangeText={(text) => setFormData({ ...formData, restaurantName: text })}
-                            placeholder="e.g. The Spicy Bistro"
-                            error={errors.restaurantName}
-                        />
+                <CustomTextInput
+                    label="Email Address"
+                    value={formData.email}
+                    onChangeText={(text) => setFormData({ ...formData, email: text })}
+                    placeholder="Enter email address"
+                    error={errors.email}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    leftIcon={<Ionicons name="mail-outline" size={20} color="#666" />}
+                />
 
-                        <CustomTextInput
-                            label="Email Address"
-                            value={formData.email}
-                            onChangeText={(text) => setFormData({ ...formData, email: text })}
-                            placeholder="Manager's email"
-                            error={errors.email}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                        />
+                <CustomTextInput
+                    label="Password"
+                    value={formData.password}
+                    onChangeText={(text) => setFormData({ ...formData, password: text })}
+                    placeholder="Create a strong password"
+                    error={errors.password}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    leftIcon={<Ionicons name="lock-closed-outline" size={20} color="#666" />}
+                />
 
-                        <CustomTextInput
-                            label="Password"
-                            value={formData.password}
-                            onChangeText={(text) => setFormData({ ...formData, password: text })}
-                            placeholder="Create password"
-                            error={errors.password}
-                            secureTextEntry
-                            autoCapitalize="none"
-                        />
+                <CustomTextInput
+                    label="Confirm Password"
+                    value={formData.confirmPassword}
+                    onChangeText={(text) => setFormData({ ...formData, confirmPassword: text })}
+                    placeholder="Re-enter password"
+                    error={errors.confirmPassword}
+                    secureTextEntry
+                    autoCapitalize="none"
+                    leftIcon={<Ionicons name="checkmark-circle-outline" size={20} color="#666" />}
+                />
 
-                        <CustomTextInput
-                            label="Confirm Password"
-                            value={formData.confirmPassword}
-                            onChangeText={(text) =>
-                                setFormData({ ...formData, confirmPassword: text })
-                            }
-                            placeholder="Re-enter password"
-                            error={errors.confirmPassword}
-                            secureTextEntry
-                            autoCapitalize="none"
-                        />
-
+                {role !== "vendor" && (
+                    <>
                         <Text style={[styles.sectionHeader, { marginTop: 10 }]}>Location & Contact</Text>
                         
                         <CustomTextInput
@@ -186,6 +195,7 @@ export default function SignUpScreen() {
                             onChangeText={(text) => setFormData({ ...formData, restaurantAddress: text })}
                             placeholder="Complete address"
                             multiline
+                            leftIcon={<Ionicons name="location-outline" size={20} color="#666" />}
                         />
 
                         <CustomTextInput
@@ -193,20 +203,29 @@ export default function SignUpScreen() {
                             value={formData.city}
                             onChangeText={(text) => setFormData({ ...formData, city: text })}
                             placeholder="Enter city"
+                            leftIcon={<Ionicons name="map-outline" size={20} color="#666" />}
                         />
+                    </>
+                )}
 
-                        <CustomTextInput
-                            label="Contact Number"
-                            value={formData.restaurantPhone}
-                            onChangeText={(text) => setFormData({ ...formData, restaurantPhone: text })}
-                            placeholder="Restaurant phone line"
-                            keyboardType="phone-pad"
-                        />
-                    </View>
-                </ScrollView>
+                <CustomTextInput
+                    label="Contact Number"
+                    value={formData.restaurantPhone}
+                    onChangeText={(text) => setFormData({ ...formData, restaurantPhone: text })}
+                    placeholder="Primary contact number"
+                    keyboardType="phone-pad"
+                    leftIcon={<Ionicons name="call-outline" size={20} color="#666" />}
+                />
 
                 <View style={styles.buttonContainer}>
-                    <CustomButton label="SIGN UP" onPress={handleSignUp} loading={loading} />
+                    <CustomButton label="CREATE ACCOUNT" onPress={handleSignUp} loading={loading} />
+                </View>
+
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>Already have an account? </Text>
+                    <TouchableOpacity onPress={() => router.push('/login' as any)}>
+                        <Text style={styles.loginLink}>LOG IN</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         </AuthContainer>
@@ -214,24 +233,77 @@ export default function SignUpScreen() {
 }
 
 const styles = StyleSheet.create({
-    content: {
-        flex: 1,
-        justifyContent: 'space-between',
-    },
     formContainer: {
         marginTop: AuthTheme.spacing.md,
+        paddingBottom: 40,
     },
-    buttonContainer: {
-        marginTop: AuthTheme.spacing.md,
-        paddingBottom: AuthTheme.spacing.lg,
+    roleSelectorWrapper: {
+        marginBottom: 24,
+    },
+    roleTitle: {
+        fontSize: 14,
+        fontWeight: '700',
+        color: '#444',
+        marginBottom: 12,
+        letterSpacing: 0.5,
+    },
+    roleContainer: {
+        flexDirection: 'row',
+        gap: 12,
+    },
+    roleLabelWrapper: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 12,
+        backgroundColor: '#F5F6F7',
+        borderWidth: 1,
+        borderColor: '#EEE',
+        gap: 8,
+    },
+    activeRoleWrapper: {
+        backgroundColor: '#FFF1E8',
+        borderColor: AuthTheme.colors.primary,
+        borderWidth: 1.5,
+    },
+    roleLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#888',
+    },
+    activeRoleText: {
+        color: AuthTheme.colors.primary,
     },
     sectionHeader: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: 'bold',
         color: AuthTheme.colors.primary,
-        marginBottom: 15,
-        backgroundColor: '#F8F9FA',
-        padding: 8,
-        borderRadius: 5,
+        marginBottom: 16,
+        backgroundColor: '#FBFBFB',
+        padding: 10,
+        borderRadius: 8,
+        borderLeftWidth: 4,
+        borderLeftColor: AuthTheme.colors.primary,
+    },
+    buttonContainer: {
+        marginTop: 20,
+        marginBottom: 20,
+    },
+    footer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginTop: 10,
+    },
+    footerText: {
+        color: '#666',
+        fontSize: 14,
+    },
+    loginLink: {
+        color: AuthTheme.colors.primary,
+        fontWeight: 'bold',
+        fontSize: 14,
     },
 });
+

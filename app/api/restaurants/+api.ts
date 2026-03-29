@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 
-export async function GET() {
+export default async function GET() {
     try {
         const restaurants = await prisma.restaurant.findMany({
             where: { is_active: true },

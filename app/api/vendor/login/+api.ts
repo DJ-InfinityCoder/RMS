@@ -7,5 +7,6 @@ export async function POST(req: Request) {
     where: { email }
   });
 
-  return Response.json(vendor);
+  return Response.json({ user: vendor });
 }
+

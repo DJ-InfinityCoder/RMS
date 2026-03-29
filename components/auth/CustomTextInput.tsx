@@ -5,25 +5,31 @@ import { AuthTheme } from '@/constants/AuthTheme';
 interface CustomTextInputProps extends TextInputProps {
     label: string;
     error?: string;
+    leftIcon?: React.ReactNode;
 }
 
 export const CustomTextInput: React.FC<CustomTextInputProps> = ({
     label,
     error,
+    leftIcon,
     ...props
 }) => {
     return (
         <View style={styles.container}>
             <Text style={styles.label}>{label.toUpperCase()}</Text>
-            <TextInput
-                style={[styles.input, error && styles.inputError]}
-                placeholderTextColor={AuthTheme.colors.textGrey}
-                {...props}
-            />
+            <View style={[styles.inputWrapper, error && styles.inputError]}>
+                {leftIcon && <View style={styles.iconContainer}>{leftIcon}</View>}
+                <TextInput
+                    style={styles.input}
+                    placeholderTextColor={AuthTheme.colors.textGrey}
+                    {...props}
+                />
+            </View>
             {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
     );
 };
+
 
 const styles = StyleSheet.create({
     container: {
@@ -36,17 +42,27 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         letterSpacing: 0.5,
     },
-    input: {
+    inputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
         backgroundColor: AuthTheme.colors.inputBackground,
         borderRadius: AuthTheme.borderRadius.small,
+        borderWidth: 1.5,
+        borderColor: 'transparent',
+    },
+    iconContainer: {
+        paddingLeft: AuthTheme.spacing.md,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    input: {
+        flex: 1,
         paddingHorizontal: AuthTheme.spacing.md,
         paddingVertical: AuthTheme.spacing.md,
         fontSize: 16,
         color: '#000',
-        borderWidth: 0,
     },
     inputError: {
-        borderWidth: 1,
         borderColor: '#FF3B30',
     },
     errorText: {
@@ -55,3 +71,4 @@ const styles = StyleSheet.create({
         marginTop: AuthTheme.spacing.xs,
     },
 });
+
