@@ -4,7 +4,7 @@ import { CustomTextInput } from '@/components/auth/CustomTextInput';
 import { AuthTheme } from '@/constants/AuthTheme';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 
 export default function SignUpScreen() {
     const router = useRouter();
