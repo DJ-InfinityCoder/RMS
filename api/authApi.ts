@@ -2,6 +2,16 @@ import { supabase } from '@/lib/supabase';
 import bcrypt from 'bcryptjs';
 import * as SecureStore from 'expo-secure-store';
 
+// React Native lacks both WebCrypto and Node's crypto module.
+// Provide a fallback random byte generator for bcryptjs salt generation.
+bcrypt.setRandomFallback((len: number) => {
+  const buf = new Array(len);
+  for (let i = 0; i < len; i++) {
+    buf[i] = Math.floor(Math.random() * 256);
+  }
+  return buf;
+});
+
 const SALT_ROUNDS = 10;
 const USER_SESSION_KEY = 'user_session_id';
 
@@ -69,7 +79,7 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
       return { success: false, error: 'Invalid email or password' };
     }
 
-    const isPasswordCorrect = await bcrypt.compare(password, targetData.password_hash);
+    const isPasswordCorrect = bcrypt.compareSync(password, targetData.password_hash);
     if (!isPasswordCorrect) {
       return { success: false, error: 'Invalid email or password' };
     }
@@ -111,7 +121,8 @@ export const signUp = async (data: SignUpData): Promise<AuthResponse> => {
       return { success: false, error: 'An account with this email already exists.' };
     }
 
-    const passwordHash = await bcrypt.hash(String(password), SALT_ROUNDS);
+    const salt = bcrypt.genSaltSync(SALT_ROUNDS);
+    const passwordHash = bcrypt.hashSync(String(password), salt);
 
     const { data: newUser, error: insertError } = await supabase
       .from('users')
@@ -183,12 +194,13 @@ export const changePassword = async (
       return { success: false, error: 'User not found' };
     }
 
-    const isCorrect = await bcrypt.compare(currentPassword, data.password_hash);
+    const isCorrect = bcrypt.compareSync(currentPassword, data.password_hash);
     if (!isCorrect) {
       return { success: false, error: 'Current password is incorrect' };
     }
 
-    const newHash = await bcrypt.hash(String(newPassword), SALT_ROUNDS);
+    const newSalt = bcrypt.genSaltSync(SALT_ROUNDS);
+    const newHash = bcrypt.hashSync(String(newPassword), newSalt);
     const { error: updateError } = await supabase
       .from('users')
       .update({ password_hash: newHash })

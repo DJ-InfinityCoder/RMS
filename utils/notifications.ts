@@ -3,26 +3,49 @@
  *
  * Provides push notification setup and sending capabilities.
  * Handles both local and remote notifications.
+ *
+ * NOTE: expo-notifications remote push was removed from Expo Go in SDK 53.
+ * This module gracefully degrades when running in Expo Go.
  */
 
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+
+let Notifications: typeof import('expo-notifications') | null = null;
+let notificationsAvailable = false;
+
+try {
+  Notifications = require('expo-notifications');
+  notificationsAvailable = true;
+} catch (e) {
+  console.warn('expo-notifications is not available in this environment.');
+}
 
 // ─── Configuration ────────────────────────────────────────────────────────────
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+if (notificationsAvailable && Notifications) {
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch (e) {
+    console.warn('Failed to set notification handler:', e);
+    notificationsAvailable = false;
+  }
+}
 
 // ─── Permission Request ──────────────────────────────────────────────────────
 
 export async function requestNotificationPermissions(): Promise<boolean> {
+  if (!notificationsAvailable || !Notifications) {
+    console.warn('Notifications not available — skipping permission request.');
+    return false;
+  }
   try {
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
@@ -62,6 +85,7 @@ export async function sendLocalNotification(
   body: string,
   data?: Record<string, any>,
 ): Promise<string | null> {
+  if (!notificationsAvailable || !Notifications) return null;
   try {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
@@ -143,6 +167,7 @@ export async function scheduleNotification(
   seconds: number,
   data?: Record<string, any>,
 ): Promise<string | null> {
+  if (!notificationsAvailable || !Notifications) return null;
   try {
     const id = await Notifications.scheduleNotificationAsync({
       content: {
@@ -166,12 +191,14 @@ export async function scheduleNotification(
 // ─── Cancel All ──────────────────────────────────────────────────────────────
 
 export async function cancelAllNotifications(): Promise<void> {
+  if (!notificationsAvailable || !Notifications) return;
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
 // ─── Get Push Token ──────────────────────────────────────────────────────────
 
 export async function getPushToken(): Promise<string | null> {
+  if (!notificationsAvailable || !Notifications) return null;
   try {
     const token = await Notifications.getExpoPushTokenAsync();
     return token.data;
