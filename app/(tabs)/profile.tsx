@@ -56,7 +56,7 @@ const ProfileRow: React.FC<RowProps> = ({
             />
         ) : (
             <View style={styles.rowRight}>
-                {value && <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>}
+                {!!value && <Text style={styles.rowValue} numberOfLines={1}>{value}</Text>}
                 <Ionicons name="chevron-forward" size={16} color="#A0A5BA" />
             </View>
         )}
@@ -238,7 +238,7 @@ export default function Profile() {
                         iconColor="#16A34A"
                         label="Dietary Preferences"
                         value={preferences.dietary}
-                        onPress={() => router.push('/edit-profile' as any)}
+                        onPress={() => router.push('/settings' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -247,7 +247,7 @@ export default function Profile() {
                         iconColor="#EF4444"
                         label="Allergies"
                         value={preferences.allergies.length > 0 ? preferences.allergies.join(', ') : 'None set'}
-                        onPress={() => router.push('/edit-profile' as any)}
+                        onPress={() => router.push('/settings' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -256,7 +256,7 @@ export default function Profile() {
                         iconColor="#F59E0B"
                         label="Favourite Cuisines"
                         value={preferences.favouriteCuisines.join(', ')}
-                        onPress={() => router.push('/edit-profile' as any)}
+                        onPress={() => router.push('/settings' as any)}
                     />
                     <View style={styles.separator} />
                     <ProfileRow
@@ -265,7 +265,7 @@ export default function Profile() {
                         iconColor="#EF4444"
                         label="Spice Level"
                         value={preferences.spiceLevel}
-                        onPress={() => router.push('/edit-profile' as any)}
+                        onPress={() => router.push('/settings' as any)}
                     />
                 </View>
 

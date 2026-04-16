@@ -25,16 +25,20 @@ export interface DBRestaurant {
   phone: string | null;
   is_active: boolean;
   created_at: string;
-  image_url: string | null; // Note: We might need to add this to the schema or use a default
-  rating: number; // Calculated or stored
-  deliveryTime: string; // Static for now or calculated
-  cuisine: string[]; // From dishes or a new field
+  image_url: string | null;
+  rating: number;
+  deliveryTime: string;
+  cuisine: string[];
+  dishes?: { id: string }[];
 }
 
 export const getRestaurants = async (): Promise<DBRestaurant[]> => {
   const { data, error } = await supabase
     .from('restaurants')
-    .select('*')
+    .select(`
+      *,
+      dishes:dishes(id)
+    `)
     .eq('is_active', true);
 
   if (error) {
@@ -46,7 +50,7 @@ export const getRestaurants = async (): Promise<DBRestaurant[]> => {
     ...res,
     rating: 4.5, // Fallback if not in DB
     deliveryTime: '25 min', // Fallback
-    cuisine: ['Indian', 'Continental'], // Fallback or extract from dishes
+    cuisine: res.cuisine && res.cuisine.length > 0 ? res.cuisine : ['Indian', 'Continental'],
     image_url: res.image_url || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600',
   }));
 };
@@ -56,7 +60,14 @@ export const getRestaurantDetails = async (id: string) => {
     .from('restaurants')
     .select(`
       *,
-      dishes (*)
+      dishes (
+        *,
+        ingredients:dish_ingredients(
+          quantity,
+          unit,
+          ingredient:ingredients(name)
+        )
+      )
     `)
     .eq('id', id)
     .single();

@@ -10,20 +10,24 @@ datasource db {
 }
 
 model User {
-  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  full_name     String               @db.VarChar(100)
-  email         String               @unique @db.VarChar(150)
-  phone         String?              @unique @db.VarChar(15)
-  password_hash String
-  address       String?
-  latitude      Decimal?             @db.Decimal(9, 6)
-  longitude     Decimal?             @db.Decimal(9, 6)
-  created_at    DateTime             @default(now())
-  updated_at    DateTime             @default(now())
-  orders        Order[]
-  reviews       Review[]
-  preferences   UserFoodPreference[]
-  payments      Payment[]
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  full_name        String               @db.VarChar(100)
+  email            String               @unique @db.VarChar(150)
+  phone            String?              @unique @db.VarChar(15)
+  password_hash    String
+  address          String?
+  latitude           Decimal?             @db.Decimal(9, 6)
+  longitude          Decimal?             @db.Decimal(9, 6)
+  loyalty_points     Int                  @default(1000)
+  dietary            String?              @db.VarChar(50)
+  favourite_cuisines String[]             @default([])
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @default(now())
+  orders             Order[]
+  reviews            Review[]
+  preferences        UserFoodPreference[]
+  payments           Payment[]
+  reservations       TableReservation[]
 
   @@index([email])
   @@map("users")
@@ -61,6 +65,7 @@ model Restaurant {
   reviews       Review[]
   qr_code       RestaurantQRCode?
   table_slots   TableSlot[]
+  reservations  TableReservation[]
   cuisine       String[]          @default([])
 
   @@index([latitude, longitude], map: "idx_restaurant_location")
@@ -88,6 +93,21 @@ model TableSlot {
 
   @@index([restaurant_id], map: "idx_table_slots_restaurant")
   @@map("table_slots")
+}
+
+model TableReservation {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String     @db.Uuid
+  restaurant_id String     @db.Uuid
+  time_slot     String     @db.VarChar(20)
+  guests        Int
+  status        String     @default("CONFIRMED")
+  created_at    DateTime   @default(now())
+
+  restaurant    Restaurant @relation(fields: [restaurant_id], references: [id], onDelete: Cascade)
+  user          User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("table_reservations")
 }
 
 model Dish {
@@ -123,6 +143,8 @@ model DishIngredient {
   dish_id       String     @db.Uuid
   ingredient_id String     @db.Uuid
   is_allergen   Boolean    @default(false)
+  quantity      String?    @db.VarChar(50)
+  unit          String?    @db.VarChar(50)
   dish          Dish       @relation(fields: [dish_id], references: [id], onDelete: Cascade)
   ingredient    Ingredient @relation(fields: [ingredient_id], references: [id], onDelete: Cascade)
 

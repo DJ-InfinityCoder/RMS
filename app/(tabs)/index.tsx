@@ -11,16 +11,17 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Modal
 } from 'react-native';
 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-// Removed: import useUserLocation from '@/hooks/useUserLocation';
 import { getRestaurants, DBRestaurant, getTrendingDishes, getOffers, DBMenuItem } from '@/api/restaurantApi';
 import { useUser } from '@/lib/UserContext';
 import { useCart } from '@/lib/CartContext';
 import Skeleton from '@/components/ui/Skeleton';
+import { rankRestaurantsByCuisine } from '@/services/rankingService';
 
 const { width } = Dimensions.get('window');
 
@@ -36,7 +37,7 @@ const QUICK_CATEGORIES = [
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { profile, syncLocation, loading: userLoading } = useUser();
+  const { profile, preferences, syncLocation, loading: userLoading } = useUser();
   const { items } = useCart();
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [restaurants, setRestaurants] = useState<DBRestaurant[]>([]);
@@ -44,10 +45,19 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [trendingDishes, setTrendingDishes] = useState<DBMenuItem[]>([]);
   const [offers, setOffers] = useState<any[]>([]);
+  const [showLocationPrompt, setShowLocationPrompt] = useState(false);
+  const [searchWithoutPrefs, setSearchWithoutPrefs] = useState(false);
 
   useEffect(() => {
     fetchData();
+    checkLocationAccess();
   }, []);
+
+  const checkLocationAccess = async () => {
+     if (!profile.address || !profile.latitude) {
+         setShowLocationPrompt(true);
+     }
+  };
 
   const cartItemCount = useMemo(() => {
     return items.reduce((sum, item) => sum + item.qty, 0);
@@ -96,17 +106,24 @@ export default function HomeScreen() {
     return "Good Night";
   }, []);
 
-  // ─── Category filter ───────────────────────────────────────────────────────
+  // ─── Category filter + personalized ranking ────────────────────────────────
   const filteredRestaurants = useMemo(() => {
-    // We use restaurants even if coordinates aren't synced yet
-    const nearby = restaurants;
+    let list = [...restaurants];
 
-    if (selectedCategory === "All") return nearby;
+    // Apply cuisine category filter
+    if (selectedCategory !== "All") {
+      list = list.filter((res) =>
+        res.cuisine.some((c) => c.toLowerCase().includes(selectedCategory.toLowerCase()))
+      );
+    }
 
-    return nearby.filter((res) =>
-      res.cuisine.some((c) => c.toLowerCase().includes(selectedCategory.toLowerCase()))
-    );
-  }, [selectedCategory, restaurants]);
+    // Apply personalized ranking (favourite cuisines first) unless disabled
+    if (!searchWithoutPrefs && preferences.favouriteCuisines.length > 0) {
+      list = rankRestaurantsByCuisine(list, preferences.favouriteCuisines);
+    }
+
+    return list;
+  }, [selectedCategory, restaurants, preferences.favouriteCuisines, searchWithoutPrefs]);
 
   const renderCategory = ({ item }: { item: (typeof QUICK_CATEGORIES)[0] }) => (
     <TouchableOpacity
@@ -253,6 +270,34 @@ export default function HomeScreen() {
         </ScrollView>
       </SafeAreaView>
     );
+  }
+
+  // If we require location first before entering home page
+  if (showLocationPrompt) {
+      return (
+          <SafeAreaView style={[styles.container as any, { justifyContent: 'center', alignItems: 'center' }]}>
+              <View style={{ alignItems: 'center', padding: 20 }}>
+                  <Ionicons name="location" size={60} color="#FF7A00" style={{ marginBottom: 20 }} />
+                  <Text style={{ fontSize: 22, fontWeight: '800', color: '#181C2E', marginBottom: 10, textAlign: 'center' }}>
+                      Location Access Required
+                  </Text>
+                  <Text style={{ fontSize: 14, color: '#A0A5BA', textAlign: 'center', marginBottom: 30 }}>
+                      Please sync your location to see nearby restaurants and get accurate delivery times.
+                  </Text>
+                  <TouchableOpacity 
+                      style={{ backgroundColor: '#FF7A00', paddingHorizontal: 30, paddingVertical: 15, borderRadius: 20 }}
+                      onPress={async () => {
+                          setLoading(true);
+                          await syncLocation();
+                          setShowLocationPrompt(false);
+                          setLoading(false);
+                      }}
+                  >
+                      <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 16 }}>Grant Location Access</Text>
+                  </TouchableOpacity>
+              </View>
+          </SafeAreaView>
+      );
   }
 
   return (
@@ -421,6 +466,28 @@ export default function HomeScreen() {
           </Text>
           <Text style={styles.countBadge as any}>{filteredRestaurants.length}</Text>
         </View>
+
+        {/* ─── Search Without Preferences Toggle ────────────────────── */}
+        <TouchableOpacity
+          style={[
+            styles.prefToggleBtn as any,
+            searchWithoutPrefs && (styles.prefToggleBtnActive as any),
+          ]}
+          onPress={() => setSearchWithoutPrefs(!searchWithoutPrefs)}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name={searchWithoutPrefs ? 'shuffle' : 'options-outline'}
+            size={16}
+            color={searchWithoutPrefs ? '#FFF' : '#FF7A00'}
+          />
+          <Text style={[
+            styles.prefToggleText as any,
+            searchWithoutPrefs && (styles.prefToggleTextActive as any),
+          ]}>
+            {searchWithoutPrefs ? 'Apply Preferences' : 'Search without preferences'}
+          </Text>
+        </TouchableOpacity>
 
         <FlatList
           data={filteredRestaurants}
@@ -780,6 +847,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginTop: 20,
     alignItems: "center",
+    marginBottom: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -1046,5 +1114,31 @@ const styles = StyleSheet.create({
     marginTop: 20,
     fontWeight: '600',
     letterSpacing: 0.5,
+  },
+  prefToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 122, 0, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 16,
+    marginTop: -4,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 122, 0, 0.3)',
+  },
+  prefToggleBtnActive: {
+    backgroundColor: '#FF7A00',
+    borderColor: '#FF7A00',
+  },
+  prefToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF7A00',
+  },
+  prefToggleTextActive: {
+    color: '#FFF',
   },
 });

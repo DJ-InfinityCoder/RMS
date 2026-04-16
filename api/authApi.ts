@@ -47,7 +47,7 @@ export const login = async (credentials: LoginCredentials): Promise<AuthResponse
       .from('users')
       .select('*')
       .eq('email', email)
-      .maybeSingle();
+      .maybeSingle(); 
 
     if (userError) {
       console.error('DB error (users):', userError.message);
@@ -130,6 +130,7 @@ export const signUp = async (data: SignUpData): Promise<AuthResponse> => {
         full_name: name,
         email: email,
         password_hash: passwordHash,
+        loyalty_points: 1000,
       })
       .select()
       .single();

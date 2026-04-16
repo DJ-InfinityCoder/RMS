@@ -60,8 +60,10 @@ export const initiateSecureUPIPayment = async (
     const txnRef = `RMS-${payment.id.slice(0, 8)}-${Date.now()}`;
     const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(restaurantName)}&am=${amount}&cu=INR&tn=${encodeURIComponent('Order from ' + restaurantName)}&tr=${txnRef}`;
 
-    const supported = await Linking.canOpenURL(upiUrl);
-    if (!supported) {
+    // ── Open UPI app ────────────────────────────────────────────────────
+    try {
+      await Linking.openURL(upiUrl);
+    } catch (e) {
       await failPayment(payment.id);
       Alert.alert(
         'UPI Not Supported',
@@ -69,9 +71,6 @@ export const initiateSecureUPIPayment = async (
       );
       return { success: false, error: 'UPI not supported' };
     }
-
-    // ── Open UPI app ────────────────────────────────────────────────────
-    await Linking.openURL(upiUrl);
 
     return {
       success: true,

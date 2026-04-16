@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -12,11 +12,70 @@ interface ToastProps {
   onHide: () => void;
 }
 
+export interface ToastOptions {
+  message: string;
+  type?: 'success' | 'error' | 'info';
+  duration?: number;
+}
+
+export interface ToastRef {
+  show: (options: ToastOptions) => void;
+}
+
 const COLORS = {
-  success: { bg: '#F0FDF4', border: '#22C55E', text: '#166534', icon: 'checkmark-circle' },
+  success: { bg: '#FFF', border: '#FF7A00', text: '#181C2E', icon: 'checkmark-circle' },
   error: { bg: '#FEF2F2', border: '#EF4444', text: '#991B1B', icon: 'alert-circle' },
-  info: { bg: '#FFF4E5', border: '#FF7A00', text: '#9A3412', icon: 'information-circle' },
+  info: { bg: '#F8F9FB', border: '#181C2E', text: '#181C2E', icon: 'information-circle' },
 };
+
+// Global ref instance
+let globalToastRef: ToastRef | null = null;
+
+export const setGlobalToastRef = (ref: ToastRef | null) => {
+  globalToastRef = ref;
+};
+
+export const showGlobalToast = (options: ToastOptions) => {
+  if (globalToastRef) {
+    globalToastRef.show(options);
+  } else {
+    console.warn('Global Toast not initialized. Provide GlobalToast in your root component.');
+  }
+};
+
+export const GlobalToast = forwardRef<ToastRef>((props, ref) => {
+  const [visible, setVisible] = useState(false);
+  const [options, setOptions] = useState<ToastOptions>({ message: '', type: 'success', duration: 2000 });
+
+  const methods = {
+    show: (opts: ToastOptions) => {
+      setOptions({
+        message: opts.message,
+        type: opts.type || 'success',
+        duration: opts.duration || 2000,
+      });
+      setVisible(true);
+    }
+  };
+
+  useImperativeHandle(ref, () => methods);
+
+  // Assign to global variable so we can use `showGlobalToast` anywhere
+  useEffect(() => {
+    setGlobalToastRef(methods);
+    return () => setGlobalToastRef(null);
+  }, []);
+
+  return (
+    <Toast 
+      visible={visible} 
+      message={options.message} 
+      type={options.type} 
+      duration={options.duration} 
+      onHide={() => setVisible(false)} 
+    />
+  );
+});
 
 export default function Toast({ visible, message, type = 'success', duration = 1200, onHide }: ToastProps) {
   const translateY = useRef(new Animated.Value(-100)).current;
@@ -70,8 +129,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     gap: 10,
-    zIndex: 9999,
-    elevation: 10,
+    zIndex: 99999,
+    elevation: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,

@@ -150,7 +150,7 @@ export default function Orders() {
                 </TouchableOpacity>
             </View>
 
-            {error && (
+            {!!error && (
                 <View style={styles.errorContainer}>
                     <Text style={styles.errorText}>{error}</Text>
                     <TouchableOpacity onPress={fetchOrders}>

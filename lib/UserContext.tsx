@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import {
   getStoredUserId,
   getUserProfile,
@@ -8,9 +9,14 @@ import {
   getUserFoodPreferences,
   updateUserFoodPreferences,
   clearStoredSession,
+  getUserLoyaltyPoints,
+  addUserLoyaltyPoints,
+  deductUserLoyaltyPoints,
 } from '@/api/userApi';
 import { UserProfile, UserFoodPreference } from '@/api/userApi';
 import { cleanupOldPayments } from '@/api/paymentApi';
+import { LOYALTY_THRESHOLD, INITIAL_LOYALTY_POINTS } from '@/services/loyaltyService';
+import { setCachedPreferences, clearPreferenceCache } from '@/services/preferencesService';
 
 export interface UserProfileData {
   id?: string;
@@ -87,31 +93,58 @@ const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
 ];
 
 const INITIAL_LOYALTY: LoyaltyInfo = {
-  points: 0,
-  threshold: 500,
+  points: INITIAL_LOYALTY_POINTS,
+  threshold: LOYALTY_THRESHOLD,
 };
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
-// ─── Reverse Geocoding ───────────────────────────────────────────────────────
+// ─── Reverse Geocoding (with retry for APK reliability) ──────────────────────
 
+/**
+ * Reverse geocodes coordinates to a human-readable address.
+ * Uses expo-location's built-in reverse geocoding which works
+ * on Android without a Google Maps API key (uses Android's Geocoder).
+ * 
+ * Includes retry logic for APK builds where the Geocoder service
+ * may not be immediately available on first call.
+ */
 const reverseGeocode = async (latitude: number, longitude: number): Promise<string> => {
-  try {
-    const results = await Location.reverseGeocodeAsync({ latitude, longitude });
-    if (results && results.length > 0) {
-      const addr = results[0];
-      const parts = [
-        addr.name,
-        addr.street,
-        addr.district,
-        addr.city,
-        addr.region,
-        addr.postalCode,
-      ].filter(Boolean);
-      return parts.join(', ') || `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000; // 1 second between retries
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // console.log(`[Location] Reverse geocoding attempt ${attempt}/${MAX_RETRIES} for (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`);
+      
+      const results = await Location.reverseGeocodeAsync({ latitude, longitude });
+      
+      if (results && results.length > 0) {
+        const addr = results[0];
+        
+        const parts = [
+          addr.name,
+          addr.street,
+          addr.district,
+          addr.city,
+          addr.region,
+          addr.postalCode,
+        ].filter(Boolean);
+        
+        const address = parts.join(', ');
+        if (address && address.trim().length > 0) {
+          return address;
+        }
+      }
+      
+    } catch (error: any) {
+      console.error(`[Location] Reverse geocoding error (attempt ${attempt}):`, error?.message || error);
     }
-  } catch (error) {
-    console.error('Reverse geocoding error:', error);
+
+    // Wait before retrying (except on last attempt)
+    if (attempt < MAX_RETRIES) {
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+    }
   }
   return `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
 };
@@ -154,6 +187,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
       }
 
+      // Load dietary and favourites from profile, and allergies from foodPrefs
       const foodPrefs = await getUserFoodPreferences(userId);
       const allergies = foodPrefs
         .filter((p) => p.is_allergy)
@@ -162,7 +196,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setPreferences((prev) => ({
         ...prev,
         allergies,
+        dietary: userProfile.dietary || prev.dietary,
+        favouriteCuisines: userProfile.favourite_cuisines || prev.favouriteCuisines,
       }));
+
+      // Load loyalty points from database
+      const loyaltyPts = await getUserLoyaltyPoints(userId);
+      setLoyalty(prev => ({ ...prev, points: loyaltyPts }));
+
+      // Cache preferences for faster filtering
+      setCachedPreferences({
+        allergies,
+        favouriteCuisines: userProfile.favourite_cuisines || preferences.favouriteCuisines,
+        dietary: userProfile.dietary || preferences.dietary,
+      });
 
       setIsLoggedIn(true);
 
@@ -179,29 +226,71 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadUserData();
   }, [loadUserData]);
 
-  // ── Auto-sync location on login if enabled ────────────────────────────────
+  // ── Location Sync (APK-compatible with robust error handling) ─────────────
 
+  /**
+   * syncLocation - Gets device location and updates user profile.
+   * 
+   * This implementation handles common APK issues:
+   * 1. Requests foreground permission explicitly
+   * 2. Checks if location services are enabled on device
+   * 3. Falls back to lastKnownPosition if getCurrentPosition fails
+   * 4. Retries reverse geocoding with delays
+   * 5. Logs all steps for debugging
+   */
   const syncLocation = useCallback(async () => {
-    if (!profile.id || !locationEnabled) return;
+    if (!profile.id || !locationEnabled) {
+      // console.log('[Location] Skipping sync - no user ID or location disabled');
+      return;
+    }
 
     try {
+      // Step 1: Request permission
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        console.log('Location permission denied');
         setLocationEnabled(false);
         return;
       }
+      // console.log('[Location] Permission granted');
 
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
+      // Step 2: Check if location services are enabled on device
+      const isEnabled = await Location.hasServicesEnabledAsync();
+      if (!isEnabled) {
+        // console.log('[Location] Device location services are OFF');
+        // Still try - some devices report false but work anyway
+      }
 
-      const { latitude, longitude } = location.coords;
+      // Step 3: Get current position with appropriate accuracy
+      let latitude: number;
+      let longitude: number;
 
-      // Reverse geocode to get readable address
+      try {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Platform.OS === 'android' 
+            ? Location.Accuracy.High  // Use High on Android for APK reliability
+            : Location.Accuracy.Balanced,
+          // Android APK fix: set a timeout to avoid hanging
+          ...(Platform.OS === 'android' ? { timeInterval: 5000, distanceInterval: 0 } : {}),
+        });
+        
+        latitude = location.coords.latitude;
+        longitude = location.coords.longitude;
+      } catch (posError: any) {
+        // Fallback: try getLastKnownPositionAsync
+        
+        const lastKnown = await Location.getLastKnownPositionAsync();
+        if (lastKnown) {
+          latitude = lastKnown.coords.latitude;
+          longitude = lastKnown.coords.longitude;
+        } else {
+          return;
+        }
+      }
+
+      // Step 4: Reverse geocode to get readable address (with retries)
       const address = await reverseGeocode(latitude, longitude);
 
-      // Update profile in DB
+      // Step 5: Update profile in DB
       const updated = await updateUserLocationAPI(profile.id, latitude, longitude, address);
 
       if (updated) {
@@ -211,9 +300,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           latitude,
           longitude,
         }));
+      } else {
+        // console.error('[Location] Database update returned null');
       }
-    } catch (error) {
-      console.error('Location sync error:', error);
+    } catch (error: any) {
+      // console.error('[Location] Sync error:', error?.message || error);
     }
   }, [profile.id, locationEnabled]);
 
@@ -266,14 +357,32 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       setPreferences((prev) => ({ ...prev, ...updates }));
 
+      // Save allergies to user_food_preferences table
       if (updates.allergies !== undefined) {
         await updateUserFoodPreferences(profile.id, updates.allergies);
       }
+
+      // Save dietary and favouriteCuisines to users table
+      const profileUpdates: any = {};
+      if (updates.dietary !== undefined) profileUpdates.dietary = updates.dietary;
+      if (updates.favouriteCuisines !== undefined) profileUpdates.favourite_cuisines = updates.favouriteCuisines;
+
+      if (Object.keys(profileUpdates).length > 0) {
+        await updateUserProfileAPI(profile.id, profileUpdates);
+      }
+      
+      // Update Cache
+      setCachedPreferences({
+        allergies: updates.allergies ?? preferences.allergies,
+        favouriteCuisines: updates.favouriteCuisines ?? preferences.favouriteCuisines,
+        dietary: updates.dietary ?? preferences.dietary,
+      });
+
     } catch (error) {
       console.error('Failed to update preferences:', error);
       throw error;
     }
-  }, [profile.id]);
+  }, [profile.id, preferences]);
 
   const addAllergy = useCallback(async (ingredient: string) => {
     if (!profile.id) return;
@@ -309,16 +418,30 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPaymentMethods((prev) => prev.filter((m) => m.id !== id));
   }, []);
 
-  const addLoyaltyPoints = useCallback((pts: number) => {
+  const addLoyaltyPoints = useCallback(async (pts: number) => {
     setLoyalty((prev) => ({ ...prev, points: prev.points + pts }));
-  }, []);
+    if (profile.id) {
+      try {
+        await addUserLoyaltyPoints(profile.id, pts);
+      } catch (e) {
+        console.error('Failed to sync loyalty points add:', e);
+      }
+    }
+  }, [profile.id]);
 
-  const deductLoyaltyPoints = useCallback((pts: number) => {
+  const deductLoyaltyPoints = useCallback(async (pts: number) => {
     setLoyalty((prev) => ({
       ...prev,
       points: Math.max(0, prev.points - pts),
     }));
-  }, []);
+    if (profile.id) {
+      try {
+        await deductUserLoyaltyPoints(profile.id, pts);
+      } catch (e) {
+        console.error('Failed to sync loyalty points deduction:', e);
+      }
+    }
+  }, [profile.id]);
 
   const canPayCash = useCallback(() => {
     return loyalty.points >= loyalty.threshold;
@@ -326,6 +449,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(async () => {
     await clearStoredSession();
+    clearPreferenceCache();
     setProfile(DEFAULT_PROFILE);
     setPreferences(DEFAULT_PREFERENCES);
     setLoyalty(INITIAL_LOYALTY);

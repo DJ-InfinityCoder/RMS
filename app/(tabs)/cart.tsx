@@ -14,6 +14,7 @@ import { useCart, RestaurantCart } from '@/lib/CartContext';
 import { createMultipleTakeawayOrders } from '@/api/orderApi';
 import { notifyOrderStatus } from '@/utils/notifications';
 import { initiateSecureUPIPayment, confirmPaymentOnServer, cancelPayment } from '@/lib/upiPayment';
+import { useUser } from '@/lib/UserContext';
 
 const generateTimeSlots = (): string[] => {
   return [
@@ -32,6 +33,7 @@ const generateTimeSlots = (): string[] => {
 export default function CartPage() {
   const router = useRouter();
   const { getGroupedByRestaurant, removeItem, updateItemQty, setScheduledTime, clearCart, clearRestaurantItems } = useCart();
+  const { canPayCash, loyalty } = useUser();
   
   const [showTimePicker, setShowTimePicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -72,90 +74,136 @@ export default function CartPage() {
       return;
     }
 
-    setLoading(true);
-    try {
-      const amount = getTotalForRestaurant(group);
+    const processPayment = async (method: 'UPI' | 'CASH') => {
+      setLoading(true);
+      try {
+        const amount = getTotalForRestaurant(group);
 
-      // Step 1: Create order on server first (PENDING status)
-      const orders = await createMultipleTakeawayOrders([group]);
-      const orderId = orders[0]?.id;
+        // Step 1: Create order on server first (PENDING status)
+        const orders = await createMultipleTakeawayOrders([group]);
+        const orderId = orders[0]?.id;
 
-      if (!orderId) {
-        throw new Error('Failed to create order');
-      }
+        if (!orderId) {
+          throw new Error('Failed to create order');
+        }
 
-      // Step 2: Initiate secure payment (auth + server record + open UPI)
-      const paymentResult = await initiateSecureUPIPayment(
-        amount,
-        group.restaurantId,
-        group.restaurantName,
-        orderId
-      );
-
-      if (!paymentResult.success || !paymentResult.paymentId) {
-        setLoading(false);
-        return;
-      }
-
-      // Step 3: Ask user to confirm they completed payment in UPI app
-      Alert.alert(
-        'Payment Confirmation',
-        'Did you successfully complete the payment in the UPI app?',
-        [
-          {
-            text: 'No, Cancel',
-            onPress: async () => {
-              await cancelPayment(paymentResult.paymentId!);
-              setLoading(false);
-            },
-            style: 'cancel',
-          },
-          {
-            text: 'Yes, I Paid',
-            onPress: async () => {
-              try {
-                // Step 4: Verify payment on server (anti-fraud gate)
-                const verified = await confirmPaymentOnServer(
-                  paymentResult.paymentId!,
-                  paymentResult.transactionId!
-                );
-
-                if (!verified) {
-                  Alert.alert(
-                    'Verification Failed',
-                    'Payment could not be verified. If you were charged, contact support with order ID: ' + orderId
-                  );
-                  setLoading(false);
-                  return;
+        if (method === 'CASH') {
+          // Bypass UPI, mark confirmed directly
+          await notifyOrderStatus('CONFIRMED', orderId, group.restaurantName);
+          Alert.alert('Success', `Order placed with Pay on Pickup for ${group.restaurantName}!`, [
+            {
+              text: 'View Orders',
+              onPress: () => {
+                clearRestaurantItems(group.restaurantId);
+                if (restaurantGroups.length === 1) {
+                  router.push('/(tabs)/orders' as any);
                 }
-
-                // Step 5: Only after server verification → mark order confirmed
-                await notifyOrderStatus('CONFIRMED', orderId, group.restaurantName);
-
-                Alert.alert('Success', `Order placed & payment verified for ${group.restaurantName}!`, [
-                  {
-                    text: 'View Orders',
-                    onPress: () => {
-                      clearRestaurantItems(group.restaurantId);
-                      if (restaurantGroups.length === 1) {
-                        router.push('/(tabs)/orders' as any);
-                      }
-                    },
-                  },
-                ]);
-              } catch (e: any) {
-                Alert.alert('Error', e.message || 'Verification failed');
-              } finally {
-                setLoading(false);
-              }
+              },
             },
+          ]);
+          setLoading(false);
+          return;
+        }
+
+        // Step 2: Initiate secure UPI payment for online option
+        const paymentResult = await initiateSecureUPIPayment(
+          amount,
+          group.restaurantId,
+          group.restaurantName,
+          orderId
+        );
+
+        if (!paymentResult.success || !paymentResult.paymentId) {
+          setLoading(false);
+          return;
+        }
+
+        // Step 3: Ask user to confirm
+        Alert.alert(
+          'Payment Confirmation',
+          'Did you successfully complete the payment in the UPI app?',
+          [
+            {
+              text: 'No, Cancel',
+              onPress: async () => {
+                await cancelPayment(paymentResult.paymentId!);
+                setLoading(false);
+              },
+              style: 'cancel',
+            },
+            {
+              text: 'Yes, I Paid',
+              onPress: async () => {
+                try {
+                  const verified = await confirmPaymentOnServer(
+                    paymentResult.paymentId!,
+                    paymentResult.transactionId!
+                  );
+
+                  if (!verified) {
+                    Alert.alert(
+                      'Verification Failed',
+                      'Payment could not be verified. Contact support with order ID: ' + orderId
+                    );
+                    setLoading(false);
+                    return;
+                  }
+
+                  await notifyOrderStatus('CONFIRMED', orderId, group.restaurantName);
+
+                  Alert.alert('Success', `Order placed & payment verified for ${group.restaurantName}!`, [
+                    {
+                      text: 'View Orders',
+                      onPress: () => {
+                        clearRestaurantItems(group.restaurantId);
+                        if (restaurantGroups.length === 1) {
+                          router.push('/(tabs)/orders' as any);
+                        }
+                      },
+                    },
+                  ]);
+                } catch (e: any) {
+                  Alert.alert('Error', e.message || 'Verification failed');
+                } finally {
+                  setLoading(false);
+                }
+              },
+            },
+          ]
+        );
+      } catch (error: any) {
+        Alert.alert('Error', error.message || 'Failed to place order');
+        setLoading(false);
+      }
+    };
+
+    Alert.alert(
+      'Select Payment Method',
+      canPayCash() 
+        ? 'Choose how you would like to pay for your order.'
+        : `Pay on Pickup requires ${loyalty.threshold} pts. (You have ${loyalty.points} pts)`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Pay Online (UPI)',
+          onPress: () => processPayment('UPI'),
+        },
+        {
+          text: 'Pay on Pickup',
+          onPress: () => {
+            if (canPayCash()) {
+              processPayment('CASH');
+            } else {
+              Alert.alert('Restricted', `You need at least ${loyalty.threshold} loyalty points to use Pay on Pickup.`);
+            }
           },
-        ]
-      );
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to place order');
-      setLoading(false);
-    }
+          style: canPayCash() ? 'default' : 'destructive',
+        },
+      ]
+    );
   };
 
   const formatScheduledTime = (date: Date | null) => {

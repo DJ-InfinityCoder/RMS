@@ -6,9 +6,11 @@ export const AuthTheme = {
         white: '#FFFFFF',
         inputBackground: '#F5F5F5',
         textGrey: '#9E9E9E',
-        facebook: '#3B5998',
-        twitter: '#1DA1F2',
-        apple: '#000000',
+        // Google brand color (for future Google Sign-In button)
+        google: '#4285F4',
+        // Error / Success
+        error: '#EF4444',
+        success: '#22C55E',
     },
     spacing: {
         xs: 4,

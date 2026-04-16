@@ -18,6 +18,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { getVendors, DBVendor as Vendor } from '@/api/vendorApi';
+import { useUser } from '@/lib/UserContext';
+import { rankVendorsByCuisine } from '@/services/rankingService';
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
 
@@ -38,12 +40,14 @@ export default function StreetVendorsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ q?: string; tag?: string; sort?: string }>();
 
+  const { preferences } = useUser();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(params.q || '');
   const [debouncedSearch, setDebouncedSearch] = useState(params.q || '');
   const [sortBy, setSortBy] = useState<'score' | 'price' | 'default'>((params.sort as any) || 'default');
   const [filterTag, setFilterTag] = useState<string | null>(params.tag || null);
+  const [searchWithoutPrefs, setSearchWithoutPrefs] = useState(false);
 
   // ─── Vendor Detail Modal ───
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
@@ -74,17 +78,25 @@ export default function StreetVendorsScreen() {
 
   const processedVendors = useMemo(() => {
     let list = [...vendors];
+
     if (filterTag) {
       list = list.filter((v) => v.tags.includes(filterTag));
     }
+
     if (sortBy === 'score') {
       list.sort((a, b) => (b.critic_score || 0) - (a.critic_score || 0));
     } else if (sortBy === 'price') {
       const priceVal = (p?: string | null) => (p?.length || 0);
       list.sort((a, b) => priceVal(b.price_range) - priceVal(a.price_range));
     }
+
+    // Apply personalized ranking unless disabled or sorting by score/price explicitly
+    if (!searchWithoutPrefs && preferences.favouriteCuisines.length > 0 && sortBy === 'default') {
+      list = rankVendorsByCuisine(list, preferences.favouriteCuisines);
+    }
+
     return list;
-  }, [vendors, sortBy, filterTag]);
+  }, [vendors, sortBy, filterTag, preferences.favouriteCuisines, searchWithoutPrefs]);
 
   const allTags = useMemo(() => {
     const tags = new Set<string>();
@@ -174,6 +186,23 @@ export default function StreetVendorsScreen() {
             <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
         )}
+      </View>
+
+      <View style={{ paddingHorizontal: 20, marginBottom: 12 }}>
+        <TouchableOpacity
+          style={[styles.prefToggleBtn, searchWithoutPrefs && styles.prefToggleBtnActive]}
+          onPress={() => setSearchWithoutPrefs(!searchWithoutPrefs)}
+          activeOpacity={0.85}
+        >
+          <Ionicons
+            name={searchWithoutPrefs ? 'shuffle' : 'options-outline'}
+            size={16}
+            color={searchWithoutPrefs ? '#FFF' : '#FF7A00'}
+          />
+          <Text style={[styles.prefToggleText, searchWithoutPrefs && styles.prefToggleTextActive]}>
+            {searchWithoutPrefs ? 'Apply Preferences' : 'Search without preferences'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <View style={{ marginBottom: 16 }}>
@@ -343,6 +372,31 @@ const styles = StyleSheet.create({
   filterText: { fontSize: 13, fontWeight: '600', color: COLORS.textSec },
   filterTextActive: { color: '#FFF' },
   divider: { width: 1, height: 24, backgroundColor: COLORS.border, marginHorizontal: 4, alignSelf: 'center' },
+
+  prefToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 122, 0, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 122, 0, 0.3)',
+  },
+  prefToggleBtnActive: {
+    backgroundColor: '#FF7A00',
+    borderColor: '#FF7A00',
+  },
+  prefToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF7A00',
+  },
+  prefToggleTextActive: {
+    color: '#FFF',
+  },
 
   list: { paddingHorizontal: 20, paddingBottom: 100 },
   card: {

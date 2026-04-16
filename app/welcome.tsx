@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { AuthTheme } from "@/constants/AuthTheme";
@@ -11,11 +11,16 @@ export default function WelcomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
       <View style={styles.bgDecor} />
+      <View style={styles.bgDecor2} />
       <View style={styles.content}>
         {/* Logo/Branding Area */}
         <View style={styles.logoContainer}>
           <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>RMS</Text>
+            <Image
+              source={require("@/assets/images/app_logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
           <Text style={styles.appName}>Restaurant Management</Text>
           <Text style={styles.tagline}>Manage your restaurant with ease</Text>
@@ -70,21 +75,22 @@ const styles = StyleSheet.create({
   logoCircle: {
     width: 120,
     height: 120,
-    borderRadius: 60,
-    backgroundColor: AuthTheme.colors.primary,
+    borderRadius: 30,
+    backgroundColor: "rgba(255, 255, 255, 1)",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: AuthTheme.spacing.md,
-    shadowColor: "#000",
+    // shadowColor: "#000",
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 6,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 1)",
   },
-  logoText: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: AuthTheme.colors.white,
+  logoImage: {
+    width: 100,
+    height: 100,
   },
   appName: {
     fontSize: 26,
@@ -144,5 +150,15 @@ const styles = StyleSheet.create({
     backgroundColor: AuthTheme.colors.primary,
     borderRadius: 110,
     opacity: 0.14,
+  },
+  bgDecor2: {
+    position: "absolute",
+    left: -60,
+    bottom: -60,
+    width: 160,
+    height: 160,
+    backgroundColor: AuthTheme.colors.primary,
+    borderRadius: 80,
+    opacity: 0.08,
   },
 });

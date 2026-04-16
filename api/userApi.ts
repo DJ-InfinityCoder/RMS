@@ -11,6 +11,9 @@ export interface UserProfile {
   address?: string;
   latitude?: number;
   longitude?: number;
+  loyalty_points?: number;
+  dietary?: string;
+  favourite_cuisines?: string[];
 }
 
 export interface UserFoodPreference {
@@ -37,7 +40,7 @@ export const getUserProfile = async (userId: string): Promise<UserProfile | null
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, full_name, email, phone, address, latitude, longitude')
+      .select('id, full_name, email, phone, address, latitude, longitude, loyalty_points, dietary, favourite_cuisines')
       .eq('id', userId)
       .single();
 
@@ -58,7 +61,7 @@ export const updateUserProfile = async (
       .from('users')
       .update({ ...updates })
       .eq('id', userId)
-      .select('id, full_name, email, phone, address, latitude, longitude')
+      .select('id, full_name, email, phone, address, latitude, longitude, loyalty_points, dietary, favourite_cuisines')
       .single();
 
     if (error) throw error;
@@ -83,7 +86,7 @@ export const updateUserLocation = async (
       .from('users')
       .update({ latitude, longitude, address })
       .eq('id', userId)
-      .select('id, full_name, email, phone, address, latitude, longitude')
+      .select('id, full_name, email, phone, address, latitude, longitude, loyalty_points, dietary, favourite_cuisines')
       .single();
 
     if (error) throw error;
@@ -200,5 +203,71 @@ export const getUserOrdersCount = async (userId: string): Promise<number> => {
   } catch (error) {
     console.error('Error getting orders count:', error);
     return 0;
+  }
+};
+
+// ─── Loyalty Points ─────────────────────────────────────────────────────────
+
+export const getUserLoyaltyPoints = async (userId: string): Promise<number> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('loyalty_points')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw error;
+    return data?.loyalty_points ?? 0;
+  } catch (error) {
+    console.error('Error fetching loyalty points:', error);
+    return 0;
+  }
+};
+
+export const updateUserLoyaltyPoints = async (
+  userId: string,
+  points: number
+): Promise<number> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .update({ loyalty_points: points })
+      .eq('id', userId)
+      .select('loyalty_points')
+      .single();
+
+    if (error) throw error;
+    return data?.loyalty_points ?? points;
+  } catch (error) {
+    console.error('Error updating loyalty points:', error);
+    throw error;
+  }
+};
+
+export const addUserLoyaltyPoints = async (
+  userId: string,
+  pointsToAdd: number
+): Promise<number> => {
+  try {
+    const current = await getUserLoyaltyPoints(userId);
+    const newTotal = current + pointsToAdd;
+    return await updateUserLoyaltyPoints(userId, newTotal);
+  } catch (error) {
+    console.error('Error adding loyalty points:', error);
+    throw error;
+  }
+};
+
+export const deductUserLoyaltyPoints = async (
+  userId: string,
+  pointsToDeduct: number
+): Promise<number> => {
+  try {
+    const current = await getUserLoyaltyPoints(userId);
+    const newTotal = Math.max(0, current - pointsToDeduct);
+    return await updateUserLoyaltyPoints(userId, newTotal);
+  } catch (error) {
+    console.error('Error deducting loyalty points:', error);
+    throw error;
   }
 };
